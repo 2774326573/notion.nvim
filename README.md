@@ -24,7 +24,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  "jinxi/notion.nvim",
+  "2774326573/notion.nvim",
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
