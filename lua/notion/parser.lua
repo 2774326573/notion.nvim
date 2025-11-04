@@ -90,6 +90,31 @@ local function list_block(block_type, text, children, opts)
 end
 
 local parse_node, parse_list, parse_list_item
+local function fallback_blocks(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local blocks = {}
+  local chunk = {}
+  local function flush()
+    if #chunk == 0 then
+      return
+    end
+    local text = table.concat(chunk, "\n")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    if text ~= "" then
+      table.insert(blocks, paragraph_block(text))
+    end
+    chunk = {}
+  end
+  for _, line in ipairs(lines) do
+    if line:match("^%s*$") then
+      flush()
+    else
+      table.insert(chunk, line)
+    end
+  end
+  flush()
+  return blocks
+end
 
 parse_list = function(node, bufnr)
   local items = {}
@@ -226,6 +251,9 @@ function M.buffer_to_blocks(bufnr, language)
 
   local blocks = {}
   parse_children(blocks, root, bufnr)
+  if #blocks == 0 then
+    blocks = fallback_blocks(bufnr)
+  end
   return blocks
 end
 
