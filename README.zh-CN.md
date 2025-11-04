@@ -22,7 +22,7 @@
 
 ```lua
 {
-  "jinxi/notion.nvim",
+  "2774326573/notion.nvim",
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
