@@ -29,13 +29,21 @@ local function apply_annotations(text, annotations)
   return value
 end
 
+local function sanitize_href(href)
+  if href == nil or href == "" or href == vim.NIL then
+    return nil
+  end
+  return href
+end
+
 local function rich_text_to_markdown(rich_text)
   local segments = {}
   for _, node in ipairs(rich_text or {}) do
     local text = node.plain_text or node.text and node.text.content or ""
     text = apply_annotations(text, node.annotations)
-    if node.href and node.href ~= "" then
-      text = ("[%s](%s)"):format(text, node.href)
+    local href = sanitize_href(node.href)
+    if href then
+      text = ("[%s](%s)"):format(text, href)
     end
     table.insert(segments, text)
   end
@@ -164,4 +172,3 @@ function M.extract_title(page, title_property)
 end
 
 return M
-
