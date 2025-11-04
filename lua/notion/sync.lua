@@ -37,6 +37,16 @@ function M.sync_buffer(bufnr)
   util.notify("[notion.nvim] Syncing page to Notion...", vim.log.levels.INFO)
 
   local blocks = parser.buffer_to_blocks(bufnr, config.tree_sitter.language)
+  if #blocks == 0 then
+    local raw = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    if raw:match("%S") then
+      util.notify(
+        "[notion.nvim] No blocks were generated from the buffer. Ensure the markdown tree-sitter parser is installed.",
+        vim.log.levels.ERROR
+      )
+      return
+    end
+  end
 
   local _, archive_err = archive_existing(page_id, config)
   if archive_err then
