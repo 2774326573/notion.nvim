@@ -2,6 +2,7 @@ local api = require("notion.api")
 local renderer = require("notion.renderer")
 local util = require("notion.util")
 local notion = require("notion")
+local sync = require("notion.sync")
 
 local M = {}
 
@@ -50,6 +51,8 @@ local function create_buffer(title)
   local name = ("notion://%s"):format(title or "page")
   vim.api.nvim_buf_set_name(bufnr, name)
   vim.bo[bufnr].bufhidden = "wipe"
+  vim.bo[bufnr].buftype = "acwrite"
+  vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].filetype = "markdown"
   vim.bo[bufnr].modifiable = true
   return bufnr
@@ -102,6 +105,14 @@ function M.open_page(page_id)
   vim.b[bufnr].notion_page_title = title
   vim.b[bufnr].notion_cached_blocks = blocks
   vim.api.nvim_buf_set_option(bufnr, "modified", false)
+
+  vim.api.nvim_create_autocmd("BufWriteCmd", {
+    buffer = bufnr,
+    callback = function()
+      sync.sync_buffer(bufnr)
+      vim.api.nvim_buf_set_option(bufnr, "modified", false)
+    end,
+  })
 
   open_window(bufnr, config, { title = title })
 end
