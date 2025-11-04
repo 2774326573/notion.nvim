@@ -46,7 +46,8 @@
 
 ```lua
 require("notion").setup({
-  token = os.getenv("NOTION_API_TOKEN"), -- 必填
+  token = os.getenv("NOTION_API_TOKEN"), -- 若未提供会回退到 token_env
+  token_env = "NOTION_API_TOKEN",        -- 默认读取的环境变量
   database_id = "YOUR_DATABASE_ID",      -- 必填
   title_property = "Name",               -- 数据库的标题属性
   notion_version = "2022-06-28",         -- 如需，可覆盖 API 版本
@@ -68,6 +69,9 @@ require("notion").setup({
 
 ### Tree-sitter 提示
 插件依赖 Neovim 对 Markdown 的 tree-sitter 支持。请确保 `markdown` 解析器已安装，并在 Notion 缓冲区设置了 `filetype=markdown`。解析器用于提取标题、列表、引用、代码块等结构，从而生成对应的 Notion blocks。
+
+### 令牌获取
+`token` 可以在 `setup()` 中直接提供，也可以通过 `token_env` 指定的环境变量（默认 `NOTION_API_TOKEN`）获取。如果两者都为空，插件仍可加载，但涉及 API 的命令会在提示缺少令牌后提前返回。
 
 ## 缓冲区生命周期
 - 使用 `notion://{page_id}` 命名 scratch 缓冲（`bufhidden=wipe`）

@@ -48,7 +48,8 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 require("notion").setup({
-  token = os.getenv("NOTION_API_TOKEN"), -- required
+  token = os.getenv("NOTION_API_TOKEN"), -- optional if token_env resolves it
+  token_env = "NOTION_API_TOKEN",        -- environment variable to fallback to
   database_id = "YOUR_DATABASE_ID",      -- required
   title_property = "Name",               -- name of the title property in the database
   notion_version = "2022-06-28",         -- override if Notion updates API version
@@ -70,6 +71,9 @@ require("notion").setup({
 
 ### Tree-sitter
 The plugin relies on Neovim's tree-sitter integration to understand Markdown structure. Ensure the `markdown` parser is installed, and your `filetype` is set to `markdown` in Notion buffers. The parser powers both block generation during sync and lightweight structural queries (e.g. headings, lists, quotes, code fences).
+
+### Token provisioning
+`token` can be provided directly in `setup()` or via an environment variable referenced by `token_env` (defaults to `NOTION_API_TOKEN`). If neither is available, the plugin keeps running but commands that talk to the API will warn and abort until a token is resolved.
 
 ## Buffer lifecycle
 - Buffers are scratch (`buftype=""`, `bufhidden="wipe"`) and named `notion://{page_id}` for easier identification.

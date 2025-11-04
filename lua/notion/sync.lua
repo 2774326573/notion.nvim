@@ -19,6 +19,9 @@ end
 
 function M.sync_buffer(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not notion.ensure_token() then
+    return
+  end
   local config = notion.get_config()
   if not config then
     util.notify("[notion.nvim] Plugin not configured.", vim.log.levels.ERROR)
@@ -61,6 +64,9 @@ end
 
 function M.reload_buffer(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not notion.ensure_token() then
+    return
+  end
   local config = notion.get_config()
   local page_id = vim.b[bufnr].notion_page_id
   if not page_id then
@@ -84,4 +90,3 @@ function M.reload_buffer(bufnr)
 end
 
 return M
-
