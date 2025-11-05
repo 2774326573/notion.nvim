@@ -66,6 +66,10 @@ local function parse_inline_markdown(text)
   if not text or text == "" then
     return {}
   end
+  -- Preserve fence markers and horizontal rules as plain text; they are handled elsewhere.
+  if text:match("^%s*([`~]{3,}).*") or text:match("^%s*---%s*$") or text:match("^%s*___%s*$") or text:match("^%s*\*\*\*%s*$") then
+    return { make_text_object(text) }
+  end
   local segments = {}
   local buffer = {}
   local i = 1
