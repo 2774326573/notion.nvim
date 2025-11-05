@@ -9,6 +9,8 @@ local state = {
   default_title_property = nil,
 }
 
+local last_database_path = (vim.fn.stdpath("data") or ".") .. "/notion.nvim/last_database.txt"
+
 local defaults = {
   token = nil,
   token_env = "NOTION_API_TOKEN",
@@ -32,6 +34,43 @@ local defaults = {
   databases = nil,
   default_database = nil,
 }
+
+local function ensure_data_dir()
+  local dir = vim.fn.fnamemodify(last_database_path, ":h")
+  if dir and dir ~= "" then
+    pcall(vim.fn.mkdir, dir, "p")
+  end
+end
+
+local function load_last_database()
+  local ok, content = pcall(function()
+    local fd = io.open(last_database_path, "r")
+    if not fd then
+      return nil
+    end
+    local data = fd:read("*l")
+    fd:close()
+    if not data or data == "" then
+      return nil
+    end
+    return vim.trim(data)
+  end)
+  if ok then
+    return content
+  end
+end
+
+local function save_last_database(id)
+  if not id or id == "" then
+    return
+  end
+  ensure_data_dir()
+  pcall(function()
+    local fd = assert(io.open(last_database_path, "w"))
+    fd:write(id)
+    fd:close()
+  end)
+end
 
 local function normalize_database_entry(db)
   if type(db) == "string" then
@@ -92,6 +131,7 @@ local function apply_database(entry)
     name = entry.name or entry.id,
     title_property = title_prop,
   }
+  save_last_database(entry.id)
   return true
 end
 
@@ -184,10 +224,15 @@ function M.setup(opts)
   state.databases = normalize_databases(config)
   config.databases = state.databases
 
+  local remembered_database = load_last_database()
+
   local initial_database = nil
-  if config.default_database then
+  if remembered_database then
+    initial_database = find_database(remembered_database)
+  end
+  if not initial_database and config.default_database then
     initial_database = find_database(config.default_database)
-  elseif type(config.database_id) == "string" and config.database_id ~= "" then
+  elseif not initial_database and type(config.database_id) == "string" and config.database_id ~= "" then
     initial_database = find_database(config.database_id)
   end
   if not initial_database and #state.databases > 0 then

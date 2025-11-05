@@ -22,7 +22,7 @@
 - **Inline authoring:** create database entries directly with `:NotionNew`, edit in place, and sync on `:w`.
 - **Automatic sync:** write the buffer or run `:NotionSync` to push updates back to Notion.
 - **Tree-sitter pipeline:** Markdown-to-Notion block conversion with safe fallbacks for unsupported content.
-- **Multi-database aware:** configure several databases at once and switch with `:NotionSelectDatabase`.
+- **Multi-database aware:** declare several databases and switch with `:NotionSelectDatabase`; the plugin remembers your last choice across sessions.
 
 ## Requirements
 
@@ -41,8 +41,19 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
-      database_id = os.getenv("NOTION_DATABASE_ID"),
-      title_property = "Name", -- update if your title column has a different name
+      databases = {
+        { name = "CMake学习",   id = "2a1c19f476e380e5b1f1e6dd98987a20" },
+        { name = "CPP学习",     id = "2a1c19f476e380c09aa0c46ab440fb04" },
+        { name = "Python学习",  id = "2a2c19f476e3817494b0d06e510a66a9" },
+        { name = "OpenCV学习",  id = "275c19f476e3800a896ac0beec2f24f7" },
+        { name = "CSharp学习",  id = "2a2c19f476e380f3a79fcefe671fcab4" },
+        { name = "随心笔记",   id = "275c19f476e380a7b4bbe0969e728279" },
+        { name = "今日代办",   id = "272c19f476e3804b81a7c5e625e6960b" },
+        { name = "每日日记",   id = "275c19f476e3800e869cd8957b05a7d4" },
+        { name = "微信阅读",   id = "275c19f476e38126aa65d18b1c61d027" },
+      },
+      default_database = "CMake学习",
+      title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
       sync = { auto_write = true },
       ui = {
         floating = false,
@@ -59,14 +70,13 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 2. Share the database (or specific pages) with that integration and grant **Can edit** permissions.
 3. Export environment variables before launching Neovim:
    - `NOTION_API_TOKEN` – integration secret.
-   - `NOTION_DATABASE_ID` – 32-character id from the database URL (strip dashes).
    - Optional: `NOTION_TITLE_PROPERTY` if your title column is not `"Name"`.
 4. Install tree-sitter grammars: `:TSInstall markdown markdown_inline`.
 5. Restart Neovim and try:
    - `:NotionListRecent` to choose a page.
    - `:NotionOpen <page_id>` to jump straight to a known page.
    - `:NotionNew` to create and open a fresh page.
-6. Edit as Markdown and write (`:w`) to sync back to Notion. If you configured multiple databases, use `:NotionSelectDatabase` to switch the active one.
+6. Edit as Markdown and write (`:w`) to sync back to Notion. Use `:NotionSelectDatabase` (or your own key bindings) to switch databases when needed.
 
 ## Commands
 
@@ -84,44 +94,28 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 require("notion").setup({
   token = os.getenv("NOTION_API_TOKEN"),
-  token_env = "NOTION_API_TOKEN",
-  database_id = os.getenv("NOTION_DATABASE_ID"),
   title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
-  notion_version = "2022-06-28",
-  timeout = 20000,
-  tree_sitter = {
-    language = "markdown",
+  databases = {
+    { name = "CMake学习",  id = "2a1c19f476e380e5b1f1e6dd98987a20" },
+    { name = "CPP学习",    id = "2a1c19f476e380c09aa0c46ab440fb04" },
+    { name = "Python学习", id = "2a2c19f476e3817494b0d06e510a66a9" },
+    { name = "OpenCV学习", id = "275c19f476e3800a896ac0beec2f24f7" },
+    { name = "CSharp学习", id = "2a2c19f476e380f3a79fcefe671fcab4" },
   },
+  default_database = "CMake学习",
   sync = {
     auto_write = true,
   },
   ui = {
     floating = false,
     open_in_tab = true,
-    width = 0.8,
-    height = 0.8,
-    border = "rounded",
   },
 })
 ```
 
-### Multiple databases
+## Multiple databases
 
-To work with several Notion databases, supply a `databases` array (each entry can have its own title property) and optionally set `default_database` to the name or id you want active at startup.
-
-```lua
-require("notion").setup({
-  token = os.getenv("NOTION_API_TOKEN"),
-  databases = {
-    { name = "Personal", id = os.getenv("NOTION_DB_PERSONAL"), title_property = "Name" },
-    { name = "Work", id = os.getenv("NOTION_DB_WORK"), title_property = "Title" },
-  },
-  default_database = "Personal",
-  sync = { auto_write = true },
-})
-```
-
-You can also expose a comma-separated `NOTION_DATABASE_IDS` (and optional `NOTION_DEFAULT_DATABASE`) environment variable; the sample configuration will register each id automatically.
+The sample configuration above hard-codes multiple databases with friendly names. The plugin also remembers the last selected database between sessions. If you prefer to generate the list dynamically (for example from an external script), do so before calling `require("notion").setup`.
 
 ## Buffer lifecycle
 
@@ -138,12 +132,3 @@ You can also expose a comma-separated `NOTION_DATABASE_IDS` (and optional `NOTIO
 ## License
 
 MIT
-
-
-
-
-
-
-
-
-

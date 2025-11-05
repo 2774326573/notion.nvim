@@ -22,7 +22,7 @@
 - **内置新建：** 通过 `:NotionNew` 直接在数据库中新建页面并立刻编辑。
 - **自动同步：** 保存（`:w`）或执行 `:NotionSync` 即可把改动推回 Notion。
 - **tree-sitter 管线：** Markdown ↔ Notion Block 转换安全可靠，无法解析的内容会退化为普通段落。
-- **多数据库支持：** 同时配置多个数据库，并通过 `:NotionSelectDatabase` 快速切换。
+- **多数据库支持：** 在配置中声明多个数据库，使用 `:NotionSelectDatabase` 快速切换；插件会在会话之间记住你上次选择的数据库。
 
 ## 环境要求
 
@@ -41,7 +41,18 @@
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
-      database_id = os.getenv("NOTION_DATABASE_ID"),
+      databases = {
+        { name = "CMake学习",   id = "2a1c19f476e380e5b1f1e6dd98987a20" },
+        { name = "CPP学习",     id = "2a1c19f476e380c09aa0c46ab440fb04" },
+        { name = "Python学习",  id = "2a2c19f476e3817494b0d06e510a66a9" },
+        { name = "OpenCV学习",  id = "275c19f476e3800a896ac0beec2f24f7" },
+        { name = "CSharp学习",  id = "2a2c19f476e380f3a79fcefe671fcab4" },
+        { name = "随心笔记",   id = "275c19f476e380a7b4bbe0969e728279" },
+        { name = "今日代办",   id = "272c19f476e3804b81a7c5e625e6960b" },
+        { name = "每日日记",   id = "275c19f476e3800e869cd8957b05a7d4" },
+        { name = "微信阅读",   id = "275c19f476e38126aa65d18b1c61d027" },
+      },
+      default_database = "CMake学习",
       title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
       sync = { auto_write = true },
       ui = {
@@ -57,16 +68,15 @@
 
 1. 在 Notion 创建内部集成，并复制集成密钥。
 2. 将目标数据库（或单独页面）分享给该集成，并授予“可编辑”权限。
-3. 启动 Neovim 之前设置环境变量：
+3. 启动 Neovim 前设置环境变量：
    - `NOTION_API_TOKEN`：集成密钥。
-   - `NOTION_DATABASE_ID`：数据库链接中的 32 位 ID（去掉短横线）。
-   - `NOTION_TITLE_PROPERTY`：可选，若数据库标题列不是 "Name"。
+   - 可选 `NOTION_TITLE_PROPERTY`：若标题列不是 `"Name"`。
 4. 安装 tree-sitter 语法：`:TSInstall markdown markdown_inline`。
-5. 重启 Neovim 并尝试：
+5. 重启 Neovim，并尝试：
    - `:NotionListRecent` 查看最近编辑的页面；
    - `:NotionOpen <page_id>` 直接打开指定页面；
    - `:NotionNew` 新建页面并立即进入编辑。
-6. 像普通 Markdown 一样编辑，执行 `:w` 即同步回 Notion；如果配置了多个数据库，可用 `:NotionSelectDatabase` 切换当前数据库。
+6. 像普通 Markdown 一样编辑，执行 `:w` 即同步回 Notion；如需切换数据库，可使用 `:NotionSelectDatabase` 或自定义快捷键。
 
 ## 常用命令
 
@@ -77,49 +87,33 @@
 | `:NotionOpen {page_id}` | 根据页面 ID 直接打开 |
 | `:NotionNew` | 新建页面并立即打开 |
 | `:NotionSync` | 手动同步当前缓冲区 |
-| `:NotionSelectDatabase` | 在配置了多个数据库时切换当前数据库 |
+| `:NotionSelectDatabase` | 多数据库环境下切换当前数据库 |
 
 ## 配置参考
 
 ```lua
 require("notion").setup({
   token = os.getenv("NOTION_API_TOKEN"),
-  token_env = "NOTION_API_TOKEN",
-  database_id = os.getenv("NOTION_DATABASE_ID"),
   title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
-  notion_version = "2022-06-28",
-  timeout = 20000,
-  tree_sitter = {
-    language = "markdown",
+  databases = {
+    { name = "CMake学习",  id = "2a1c19f476e380e5b1f1e6dd98987a20" },
+    { name = "CPP学习",    id = "2a1c19f476e380c09aa0c46ab440fb04" },
+    { name = "Python学习", id = "2a2c19f476e3817494b0d06e510a66a9" },
+    { name = "OpenCV学习", id = "275c19f476e3800a896ac0beec2f24f7" },
+    { name = "CSharp学习", id = "2a2c19f476e380f3a79fcefe671fcab4" },
   },
-  sync = {
-    auto_write = true,
-  },
+  default_database = "CMake学习",
+  sync = { auto_write = true },
   ui = {
     floating = false,
     open_in_tab = true,
-    width = 0.8,
-    height = 0.8,
-    border = "rounded",
   },
 })
 ```
 
 ## 多数据库示例
 
-```lua
-require("notion").setup({
-  token = os.getenv("NOTION_API_TOKEN"),
-  databases = {
-    { name = "个人", id = os.getenv("NOTION_DB_PERSONAL"), title_property = "Name" },
-    { name = "工作", id = os.getenv("NOTION_DB_WORK"), title_property = "Title" },
-  },
-  default_database = "个人",
-  sync = { auto_write = true },
-})
-```
-
-也可以通过设置以逗号分隔的 `NOTION_DATABASE_IDS`（以及可选的 `NOTION_DEFAULT_DATABASE`）环境变量，让示例配置自动注册多个数据库。
+上面的示例直接在配置中写死了多个数据库并给出友好的名称。插件会在不同 Neovim 会话之间记住你上次选择的数据库。如果希望从外部脚本或环境变量动态生成列表，只需在调用 `require("notion").setup` 之前构造好对应的 Lua 表。
 
 ## 缓冲区说明
 
@@ -131,9 +125,8 @@ require("notion").setup({
 
 - 当前支持的 Block 类型包括标题、段落、列表、引用、代码块、待办等常用结构。
 - 不支持的 Block 会自动降级为普通段落，以防止内容丢失。
-- 由于 Notion API 需要先归档旧 Block 再追加新内容，大型页面同步时可能需要数秒。
+- 由于 Notion API 需要先归档旧块再追加新内容，大型页面同步时可能需要数秒。
 
 ## 许可证
 
 MIT
-

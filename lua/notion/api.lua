@@ -94,21 +94,38 @@ function M.list_pages(config, opts)
   if not config.database_id or config.database_id == "" then
     return nil, "Database ID is missing in configuration."
   end
-  local body = {
+  local base_body = {
     page_size = (opts and opts.page_size) or 20,
     filter = opts and opts.filter or nil,
     sorts = opts and opts.sorts or nil,
   }
-  local response, err = request(
-    "POST",
-    ("databases/%s/query"):format(util.norm_id(config.database_id)),
-    config,
-    trim_nil(body)
-  )
-  if not response then
-    return nil, err
-  end
-  return response.results or {}, nil
+
+  local results = {}
+  local cursor = nil
+
+  repeat
+    local payload = {
+      page_size = base_body.page_size,
+      filter = base_body.filter,
+      sorts = base_body.sorts,
+      start_cursor = cursor,
+    }
+    local response, err = request(
+      "POST",
+      ("databases/%s/query"):format(util.norm_id(config.database_id)),
+      config,
+      trim_nil(payload)
+    )
+    if not response then
+      return nil, err
+    end
+    for _, item in ipairs(response.results or {}) do
+      table.insert(results, item)
+    end
+    cursor = response.has_more and response.next_cursor or nil
+  until not cursor
+
+  return results, nil
 end
 
 function M.retrieve_page(page_id, config)
