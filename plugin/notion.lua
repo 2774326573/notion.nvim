@@ -38,3 +38,9 @@ end, {
   desc = "Sync current buffer back to Notion",
 })
 
+vim.api.nvim_create_user_command("NotionSelectDatabase", function()
+  notion.select_database()
+end, {
+  nargs = 0,
+  desc = "Select active Notion database",
+})

@@ -10,17 +10,19 @@
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Configuration reference](#configuration-reference)
+- [Multiple databases](#multiple-databases)
 - [Buffer lifecycle](#buffer-lifecycle)
 - [Notes and limitations](#notes-and-limitations)
 - [License](#license)
 
 ## Features
 
-- **Page picker** – list database pages via `:NotionList` or the recency-sorted `:NotionListRecent`.
-- **Tab-friendly UI** – open any page (picker or explicit ID) in a new Neovim tab instead of a floating window.
-- **Inline authoring** – create database entries directly with `:NotionNew`, edit in place, and sync on `:w`.
-- **Automatic sync** – write the buffer or run `:NotionSync` to push updates back to Notion.
-- **Tree-sitter pipeline** – Markdown → Notion block conversion with safe fallbacks for unsupported content.
+- **Page picker:** list database pages via `:NotionList` or the recency-sorted `:NotionListRecent`.
+- **Tab-friendly UI:** open any page (picker or explicit ID) in a new Neovim tab instead of a floating window.
+- **Inline authoring:** create database entries directly with `:NotionNew`, edit in place, and sync on `:w`.
+- **Automatic sync:** write the buffer or run `:NotionSync` to push updates back to Notion.
+- **Tree-sitter pipeline:** Markdown-to-Notion block conversion with safe fallbacks for unsupported content.
+- **Multi-database aware:** configure several databases at once and switch with `:NotionSelectDatabase`.
 
 ## Requirements
 
@@ -64,7 +66,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
    - `:NotionListRecent` to choose a page.
    - `:NotionOpen <page_id>` to jump straight to a known page.
    - `:NotionNew` to create and open a fresh page.
-6. Edit as Markdown and write (`:w`) to sync back to Notion.
+6. Edit as Markdown and write (`:w`) to sync back to Notion. If you configured multiple databases, use `:NotionSelectDatabase` to switch the active one.
 
 ## Commands
 
@@ -75,6 +77,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:NotionOpen {page_id}` | Open a page directly by its Notion id. |
 | `:NotionNew` | Prompt for a title, create a page, then open it. |
 | `:NotionSync` | Force a sync of the current buffer back to Notion. |
+| `:NotionSelectDatabase` | Pick the active database when multiple are configured. |
 
 ## Configuration reference
 
@@ -102,6 +105,24 @@ require("notion").setup({
 })
 ```
 
+### Multiple databases
+
+To work with several Notion databases, supply a `databases` array (each entry can have its own title property) and optionally set `default_database` to the name or id you want active at startup.
+
+```lua
+require("notion").setup({
+  token = os.getenv("NOTION_API_TOKEN"),
+  databases = {
+    { name = "Personal", id = os.getenv("NOTION_DB_PERSONAL"), title_property = "Name" },
+    { name = "Work", id = os.getenv("NOTION_DB_WORK"), title_property = "Title" },
+  },
+  default_database = "Personal",
+  sync = { auto_write = true },
+})
+```
+
+You can also expose a comma-separated `NOTION_DATABASE_IDS` (and optional `NOTION_DEFAULT_DATABASE`) environment variable; the sample configuration will register each id automatically.
+
 ## Buffer lifecycle
 
 - Buffers are scratch (`buftype="acwrite"`, `bufhidden="wipe"`) and named `notion://{page_id}`.
@@ -117,3 +138,12 @@ require("notion").setup({
 ## License
 
 MIT
+
+
+
+
+
+
+
+
+
