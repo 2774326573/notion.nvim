@@ -199,20 +199,51 @@ end
 local function code_block(language, text)
   -- Notion API has a 2000 character limit per rich_text item
   -- Split long code into multiple text objects
+  local function sanitize_code_content(value)
+    local cleaned = (value or ""):gsub("\r", "")
+    if cleaned == "" then
+      return cleaned
+    end
+    local lines = vim.split(cleaned, "\n", { plain = true })
+    if #lines == 0 then
+      return cleaned
+    end
+    local last = lines[#lines]
+    local closing = last and last:match("^%s*([`~]{3,})%s*$")
+    if closing then
+      local fence_char = closing:sub(1, 1)
+      local fence_seq = string.rep(fence_char, #closing)
+      local first = lines[1]
+      if first and first:match("^%s*" .. fence_seq) then
+        table.remove(lines, #lines)
+        table.remove(lines, 1)
+        while #lines > 0 and lines[1] == "" do
+          table.remove(lines, 1)
+        end
+        while #lines > 0 and lines[#lines] == "" do
+          table.remove(lines, #lines)
+        end
+      end
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local clean_text = sanitize_code_content(text)
+
   local rich_text = {}
   local max_length = 2000
-  
-  if #text <= max_length then
-    table.insert(rich_text, text_object(text))
+
+  if #clean_text <= max_length then
+    table.insert(rich_text, text_object(clean_text))
   else
     local pos = 1
-    while pos <= #text do
-      local chunk = text:sub(pos, pos + max_length - 1)
+    while pos <= #clean_text do
+      local chunk = clean_text:sub(pos, pos + max_length - 1)
       table.insert(rich_text, text_object(chunk))
       pos = pos + max_length
     end
   end
-  
+
   return {
     object = "block",
     type = "code",
@@ -549,12 +580,43 @@ parse_node = function(node, bufnr)
   return nil
 end
 
-local function count_code_blocks(blocks)
+local function analyze_code_blocks(blocks)
   local total = 0
+  local with_fences = 0
+
+  local function chunk_contains_fence(text)
+    if not text or text == "" then
+      return false
+    end
+    for line in text:gmatch("[^\n]+") do
+      if line:match("^%s*[`~]{3,}%s*$") then
+        return true
+      end
+    end
+    return false
+  end
+
+  local function block_has_raw_fence(block)
+    local payload = block.code
+    if not payload then
+      return false
+    end
+    for _, rt in ipairs(payload.rich_text or {}) do
+      local value = (rt.text and rt.text.content) or rt.plain_text or ""
+      if chunk_contains_fence(value) then
+        return true
+      end
+    end
+    return false
+  end
+
   local function walk(list)
     for _, block in ipairs(list or {}) do
       if block.type == "code" then
         total = total + 1
+        if block_has_raw_fence(block) then
+          with_fences = with_fences + 1
+        end
       end
       local payload = block[block.type]
       if payload and payload.children then
@@ -562,8 +624,9 @@ local function count_code_blocks(blocks)
       end
     end
   end
+
   walk(blocks)
-  return total
+  return total, with_fences
 end
 
 local function count_fenced_code_in_buffer(bufnr)
@@ -610,9 +673,11 @@ function M.buffer_to_blocks(bufnr, language)
   local blocks = {}
   parse_children(blocks, root, bufnr)
   local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
-  local actual_code_blocks = count_code_blocks(blocks)
+  local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
-  if #blocks == 0 or (expected_code_blocks > 0 and actual_code_blocks < expected_code_blocks) then
+  if #blocks == 0
+    or (expected_code_blocks > 0 and (actual_code_blocks < expected_code_blocks or fencey_code_blocks > 0))
+  then
     blocks = fallback_blocks(bufnr)
   end
   return blocks
