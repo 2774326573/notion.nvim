@@ -75,9 +75,62 @@ local function hydrate_block_tree(blocks, config)
   end
 end
 
-local function create_buffer(title)
+local function sanitize_title(title)
+  if not title or title == "" then
+    return "Untitled"
+  end
+  local cleaned = title:gsub("[%c]", " ")
+  cleaned = cleaned:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if cleaned == "" then
+    cleaned = "Untitled"
+  end
+  return cleaned
+end
+
+local function make_buffer_name(title, page_id)
+  local base = sanitize_title(title)
+  local short_id = nil
+  if page_id then
+    local normalized = util.norm_id(page_id)
+    if normalized and normalized ~= "" then
+      short_id = normalized:sub(1, math.min(#normalized, 8))
+    end
+  end
+  if short_id then
+    base = string.format("%s [%s]", base, short_id)
+  end
+  return "notion://" .. base
+end
+
+local function unique_buffer_name(name)
+  if vim.fn.bufnr(name) == -1 then
+    return name
+  end
+  local idx = 2
+  while true do
+    local candidate = string.format("%s (%d)", name, idx)
+    if vim.fn.bufnr(candidate) == -1 then
+      return candidate
+    end
+    idx = idx + 1
+  end
+end
+
+local function find_buffer_by_page(page_id)
+  if not page_id then
+    return nil
+  end
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(bufnr) and vim.b[bufnr].notion_page_id == page_id then
+      return bufnr
+    end
+  end
+end
+
+local function create_buffer(title, page_id)
   local bufnr = vim.api.nvim_create_buf(false, true)
-  local name = ("notion://%s"):format(title or "page")
+  local name = make_buffer_name(title, page_id)
+  name = unique_buffer_name(name)
   vim.api.nvim_buf_set_name(bufnr, name)
   vim.bo[bufnr].bufhidden = "wipe"
   vim.bo[bufnr].buftype = "acwrite"
@@ -134,8 +187,27 @@ function M.open_page(page_id)
 
   local title = renderer.extract_title(page, config.title_property)
   local lines = renderer.blocks_to_markdown(blocks)
+  local existing = find_buffer_by_page(page.id)
+  if existing then
+    local target_name = make_buffer_name(title, page.id)
+    local current_name = vim.api.nvim_buf_get_name(existing)
+    if current_name ~= target_name then
+      local name = target_name
+      local found = vim.fn.bufnr(target_name)
+      if found ~= -1 and found ~= existing then
+        name = unique_buffer_name(target_name)
+      end
+      vim.api.nvim_buf_set_name(existing, name)
+    end
+    vim.api.nvim_buf_set_lines(existing, 0, -1, false, lines)
+    vim.b[existing].notion_page_title = title
+    vim.b[existing].notion_cached_blocks = blocks
+    vim.api.nvim_buf_set_option(existing, "modified", false)
+    open_window(existing, config, { title = title })
+    return
+  end
 
-  local bufnr = create_buffer(title)
+  local bufnr = create_buffer(title, page.id)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.b[bufnr].notion_page_id = page.id
   vim.b[bufnr].notion_page_title = title
