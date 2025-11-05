@@ -348,7 +348,15 @@ local function code_block(language, text, opts)
     end
     chunk = chunk .. "```"
 
-    chunk = chunk:gsub("```", "`" .. ZERO_WIDTH_SPACE .. "``")
+    local processed_lines = {}
+    for _, line in ipairs(vim.split(chunk, "\n", { plain = true, trimempty = false })) do
+      if line:match("^%s*[`~]{3,}.*$") then
+        table.insert(processed_lines, ZERO_WIDTH_SPACE .. line)
+      else
+        table.insert(processed_lines, line)
+      end
+    end
+    chunk = table.concat(processed_lines, "\n")
 
     local rich_text = {}
     local max_length = 2000
