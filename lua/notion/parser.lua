@@ -208,6 +208,12 @@ local function code_block(language, text)
     if #lines == 0 then
       return cleaned
     end
+    while #lines > 0 and lines[#lines] == "" do
+      table.remove(lines, #lines)
+    end
+    while #lines > 0 and lines[1] == "" do
+      table.remove(lines, 1)
+    end
     local last = lines[#lines]
     local closing = last and last:match("^%s*([`~]{3,})%s*$")
     if closing then
