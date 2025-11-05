@@ -115,6 +115,14 @@ require("notion").setup({
 
 上面的示例直接在配置中写死了多个数据库并给出友好的名称。插件会在不同 Neovim 会话之间记住你上次选择的数据库。如果希望从外部脚本或环境变量动态生成列表，只需在调用 `require("notion").setup` 之前构造好对应的 Lua 表。
 
+## 致谢
+
+- 类似项目：[AI0den/notion.nvim](https://github.com/AI0den/notion.nvim)。
+- 该项目引用：
+  - [impulse.nvim](https://github.com/mvllow/impulse.nvim) —— 提供灵感。
+  - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) —— 异步任务支持。
+  - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) —— 选择器体验。
+
 ## 缓冲区说明
 
 - 打开的页面命名为 `notion://{page_id}`，缓冲区类型为 `acwrite`，关闭后自动清理（`bufhidden="wipe"`）。

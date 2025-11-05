@@ -129,6 +129,14 @@ The sample configuration above hard-codes multiple databases with friendly names
 - Unsupported blocks fall back to plain paragraphs to avoid data loss.
 - Large pages may take a few seconds to archive old content and append new blocks due to Notion API semantics.
 
+## Acknowledgements
+
+- Similar project: [AI0den/notion.nvim](https://github.com/AI0den/notion.nvim).
+- That project highlights the following tools:
+  - [impulse.nvim](https://github.com/mvllow/impulse.nvim) – inspiration for the core idea.
+  - [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) – asynchronous job helpers.
+  - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) – picker UX building blocks.
+
 ## License
 
 MIT
