@@ -148,16 +148,69 @@ local function fallback_blocks(bufnr)
     return false
   end
 
-  for _, line in ipairs(lines) do
-    if line:match("^%s*$") then
+  local function push_quote(line)
+    local content = line:match("^%s*>%s?(.*)$")
+    if not content then
+      return false
+    end
+    flush_paragraph()
+    content = content ~= "" and content or " "
+    table.insert(blocks, quote_block(content))
+    return true
+  end
+
+  local function push_divider(line)
+    if line:match("^%s*[-*_][-%*_ ]*[-*_]%s*$") then
       flush_paragraph()
+      table.insert(blocks, divider_block())
+      return true
+    end
+    return false
+  end
+
+  local in_code_block = false
+  local code_fence = nil
+  local code_language = ""
+  local code_lines = {}
+
+  local function finish_code_block()
+    if not in_code_block then
+      return
+    end
+    table.insert(blocks, code_block(code_language, table.concat(code_lines, "\n")))
+    in_code_block = false
+    code_fence = nil
+    code_language = ""
+    code_lines = {}
+  end
+
+  for _, line in ipairs(lines) do
+    if in_code_block then
+      local closing = line:match("^%s*([`~]{3,})%s*$")
+      if closing and code_fence and closing:sub(1, 1) == code_fence then
+        finish_code_block()
+      else
+        table.insert(code_lines, line)
+      end
     else
-      if not (push_heading(line) or push_simple_list(line)) then
-        table.insert(chunk, line)
+      local fence, info = line:match("^%s*([`~]{3,})(.*)$")
+      if fence then
+        flush_paragraph()
+        in_code_block = true
+        code_fence = fence:sub(1, 1)
+        code_language = vim.trim(info or "")
+        code_lines = {}
+      elseif line:match("^%s*$") then
+        flush_paragraph()
+      else
+        if not (push_heading(line) or push_simple_list(line) or push_quote(line) or push_divider(line)) then
+          table.insert(chunk, line)
+        end
       end
     end
   end
   flush_paragraph()
+  finish_code_block()
 
   if #blocks == 0 then
     for _, line in ipairs(lines) do
