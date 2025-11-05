@@ -402,6 +402,13 @@ function M.fetch_pages(opts)
     end
     return nil, err
   end
+
+  if pages[1] and pages[1].properties then
+    detect_title_property_from_properties(db_id, pages[1].properties)
+  else
+    resolve_title_property(config)
+  end
+
   state.page_cache[db_id] = { items = pages, time = now }
   return pages
 end
@@ -586,6 +593,64 @@ function M.select_database()
     apply_database(choice.db)
     vim.notify("[notion.nvim] Switched to database: " .. (choice.db.name or choice.db.id), vim.log.levels.INFO)
   end)
+end
+
+local function update_database_title_property(db_id, title_key)
+  if not db_id or not title_key then
+    return
+  end
+  local norm_db = util.norm_id(db_id)
+  for _, db in ipairs(state.databases) do
+    if util.norm_id(db.id) == norm_db then
+      db.title_property = title_key
+      break
+    end
+  end
+  if state.current_database and util.norm_id(state.current_database.id) == norm_db then
+    state.current_database.title_property = title_key
+  end
+  state.config.title_property = title_key
+end
+
+local function detect_title_property_from_properties(db_id, properties)
+  if not properties then
+    return false
+  end
+  for key, prop in pairs(properties) do
+    if prop and prop.type == "title" then
+      update_database_title_property(db_id, key)
+      return true
+    end
+  end
+  return false
+end
+
+local function resolve_title_property(config)
+  local current_db = state.current_database
+  local current_key = (current_db and current_db.title_property) or config.title_property
+  if current_key and current_key ~= "" and current_key ~= "Name" then
+    return current_key
+  end
+  if not config.database_id or config.database_id == "" then
+    return current_key or "Name"
+  end
+  local db_meta, err = api.retrieve_database(config.database_id, config)
+  if not db_meta then
+    if err then
+      util.notify("[notion.nvim] Failed retrieving database metadata: " .. err, vim.log.levels.WARN)
+    end
+    return current_key or "Name"
+  end
+  detect_title_property_from_properties(config.database_id, db_meta.properties)
+  local new_key = (state.current_database and state.current_database.title_property) or config.title_property
+  return new_key or "Name"
+end
+
+function M.ensure_title_property()
+  if not ensure_setup() then
+    return (state.config and state.config.title_property) or "Name"
+  end
+  return resolve_title_property(state.config)
 end
 
 function M.set_token(opts)

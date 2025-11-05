@@ -136,13 +136,21 @@ function M.new_page()
       util.notify("[notion.nvim] Aborted creating page.", vim.log.levels.INFO)
       return
     end
-    local payload = {
-      parent = { database_id = util.norm_id(config.database_id) },
-      properties = {
-        [config.title_property] = {
-          title = { notion_text_object(input) },
-        },
+    local title_key = notion.ensure_title_property() or "Name"
+    local current_db = notion.get_current_database()
+    local db_id = (current_db and current_db.id) or config.database_id
+    if type(db_id) ~= "string" or db_id == "" then
+      util.notify("[notion.nvim] Active database is invalid. Select a database before creating pages.", vim.log.levels.ERROR)
+      return
+    end
+    local properties = {
+      [title_key] = {
+        title = { notion_text_object(input) },
       },
+    }
+    local payload = {
+      parent = { database_id = util.norm_id(db_id) },
+      properties = properties,
     }
     local page, err = api.create_page(config, payload)
     if not page then

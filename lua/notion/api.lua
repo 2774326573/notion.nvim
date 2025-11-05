@@ -201,6 +201,13 @@ function M.delete_page(page_id, config)
 end
 
 function M.create_page(config, payload)
+  local props = payload.properties or {}
+  local title_key = config.title_property or "Name"
+  if props[title_key] == nil and props["Name"] then
+    props[title_key] = props["Name"]
+    props["Name"] = nil
+  end
+  payload.properties = props
   local response, err = request("POST", "pages", config, payload)
   if not response then
     return nil, err
