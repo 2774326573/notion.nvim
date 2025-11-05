@@ -326,17 +326,49 @@ end
 
 local function code_block(language, text)
   local normalized_language = languages.normalize(language and vim.trim(language) or language)
-  local content = (text or ""):gsub("\r", "")
+
+  local function sanitize_code_content(value)
+    local cleaned = (value or ""):gsub("\r", "")
+    if cleaned == "" then
+      return cleaned
+    end
+    local lines = vim.split(cleaned, "\n", { plain = true })
+    if #lines == 0 then
+      return cleaned
+    end
+    local last = lines[#lines]
+    local closing = last and last:match("^%s*([`~]{3,})%s*$")
+    if closing then
+      local fence_char = closing:sub(1, 1)
+      local fence_seq = string.rep(fence_char, #closing)
+      local first = lines[1]
+      if first and first:match("^%s*" .. fence_seq) then
+        table.remove(lines, #lines)
+        table.remove(lines, 1)
+        while #lines > 0 and lines[1] == "" do
+          table.remove(lines, 1)
+        end
+        while #lines > 0 and lines[#lines] == "" do
+          table.remove(lines, #lines)
+        end
+      end
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local clean_text = sanitize_code_content(text)
+
+  -- Notion API has a 2000 character limit per rich_text item.
   local rich_text = {}
   local max_length = 2000
   local pos = 1
 
-  if content == "" then
+  if clean_text == "" then
     table.insert(rich_text, make_text_object("", { code = true }))
   else
-    while pos <= #content do
-      local piece = content:sub(pos, pos + max_length - 1)
-      table.insert(rich_text, make_text_object(piece, { code = true }))
+    while pos <= #clean_text do
+      local chunk = clean_text:sub(pos, pos + max_length - 1)
+      table.insert(rich_text, make_text_object(chunk, { code = true }))
       pos = pos + max_length
     end
   end
@@ -346,23 +378,6 @@ local function code_block(language, text)
     type = "code",
     code = {
       language = normalized_language,
-      rich_text = rich_text,
-    },
-  }
-
-  local rich_text = {}
-  local max_length = 2000
-  local pos = 1
-  while pos <= #chunk do
-    local piece = chunk:sub(pos, pos + max_length - 1)
-    table.insert(rich_text, make_text_object(piece))
-    pos = pos + max_length
-  end
-
-  return {
-    object = "block",
-    type = "paragraph",
-    paragraph = {
       rich_text = rich_text,
     },
   }
