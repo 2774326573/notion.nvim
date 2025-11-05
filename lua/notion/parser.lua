@@ -1,5 +1,3 @@
-local languages = require("notion.languages")
-
 local M = {}
 
 local function get_node_text(node, bufnr)
@@ -326,74 +324,34 @@ local function divider_block()
 end
 
 local function code_block(language, text)
-  -- Notion API has a 2000 character limit per rich_text item
-  -- Split long code into multiple text objects
-  local function sanitize_code_content(value)
-    local cleaned = (value or ""):gsub("\r", "")
-    if cleaned == "" then
-      return cleaned
+  local info = vim.trim(language or "")
+  local opener = info ~= "" and ("```%s"):format(info) or "```"
+  local body = (text or ""):gsub("\r", "")
+  local chunk = opener
+  if body ~= "" then
+    chunk = chunk .. "\n" .. body
+    if not body:match("\n$") then
+      chunk = chunk .. "\n"
     end
-    local lines = vim.split(cleaned, "\n", { plain = true })
-    local first = 1
-    local last = #lines
-    while first <= last and lines[first] == "" do
-      first = first + 1
-    end
-    while last >= first and lines[last] == "" do
-      last = last - 1
-    end
-    if first > last then
-      return ""
-    end
-    local opener = lines[first]
-    local closer = lines[last]
-    local closing = closer and closer:match("^%s*([`~]{3,})%s*$")
-    if closing and opener then
-      local fence_char = closing:sub(1, 1)
-      local fence_seq = string.rep(fence_char, #closing)
-      if opener:match("^%s*" .. fence_seq) then
-        first = first + 1
-        last = last - 1
-        while first <= last and lines[first] == "" do
-          first = first + 1
-        end
-        while last >= first and lines[last] == "" do
-          last = last - 1
-        end
-        if first > last then
-          return ""
-        end
-      end
-    end
-    local buffer = {}
-    for idx = first, last do
-      buffer[#buffer + 1] = lines[idx]
-    end
-    return table.concat(buffer, "\n")
+  else
+    chunk = chunk .. "\n"
   end
-
-  local clean_text = sanitize_code_content(text)
+  chunk = chunk .. "```"
 
   local rich_text = {}
   local max_length = 2000
-
-  if #clean_text <= max_length then
-    table.insert(rich_text, text_object(clean_text))
-  else
-    local pos = 1
-    while pos <= #clean_text do
-      local chunk = clean_text:sub(pos, pos + max_length - 1)
-      table.insert(rich_text, text_object(chunk))
-      pos = pos + max_length
-    end
+  local pos = 1
+  while pos <= #chunk do
+    local piece = chunk:sub(pos, pos + max_length - 1)
+    table.insert(rich_text, make_text_object(piece))
+    pos = pos + max_length
   end
 
   return {
     object = "block",
-    type = "code",
-    code = {
+    type = "paragraph",
+    paragraph = {
       rich_text = rich_text,
-      language = languages.normalize(language),
     },
   }
 end
@@ -817,6 +775,11 @@ local function analyze_code_blocks(blocks)
         total = total + 1
         if block_has_raw_fence(block) then
           with_fences = with_fences + 1
+        end
+      elseif block.type == "paragraph" then
+        local text = block_plain_text(block)
+        if text:match("^%s*([`~]{3,}).*") then
+          total = total + 1
         end
       end
       local payload = block[block.type]
