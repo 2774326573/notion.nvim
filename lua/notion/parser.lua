@@ -94,7 +94,8 @@ local function fallback_blocks(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local blocks = {}
   local chunk = {}
-  local function flush()
+
+  local function flush_paragraph()
     if #chunk == 0 then
       return
     end
@@ -105,14 +106,67 @@ local function fallback_blocks(bufnr)
     end
     chunk = {}
   end
+
+  local function push_heading(line)
+    local hashes, content = line:match("^(#+)%s*(.-)%s*$")
+    if not hashes then
+      return false
+    end
+    flush_paragraph()
+    local level = math.min(#hashes, 3)
+    content = content ~= "" and content or "Untitled"
+    table.insert(blocks, heading_block(level, content))
+    return true
+  end
+
+  local function push_simple_list(line)
+    local todo_mark, todo_text = line:match("^%s*[-*+]%s*%[(%u?%l?)%]%s*(.*)$")
+    if todo_mark then
+      flush_paragraph()
+      local checked = todo_mark == "x" or todo_mark == "X"
+      todo_text = todo_text ~= "" and todo_text or " "
+      table.insert(blocks, list_block("to_do", todo_text, nil, { checked = checked }))
+      return true
+    end
+
+    local bullet_text = line:match("^%s*[-*+]%s+(.*)$")
+    if bullet_text then
+      flush_paragraph()
+      bullet_text = bullet_text ~= "" and bullet_text or " "
+      table.insert(blocks, list_block("bulleted_list_item", bullet_text))
+      return true
+    end
+
+    local number_text = line:match("^%s*%d+[%.%)]%s+(.*)$")
+    if number_text then
+      flush_paragraph()
+      number_text = number_text ~= "" and number_text or " "
+      table.insert(blocks, list_block("numbered_list_item", number_text))
+      return true
+    end
+
+    return false
+  end
+
   for _, line in ipairs(lines) do
     if line:match("^%s*$") then
-      flush()
+      flush_paragraph()
     else
-      table.insert(chunk, line)
+      if not (push_heading(line) or push_simple_list(line)) then
+        table.insert(chunk, line)
+      end
     end
   end
-  flush()
+  flush_paragraph()
+
+  if #blocks == 0 then
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        table.insert(blocks, paragraph_block(line))
+      end
+    end
+  end
+
   return blocks
 end
 
