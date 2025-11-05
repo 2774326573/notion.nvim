@@ -56,6 +56,9 @@
       default_database = "CMake学习",
       title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
       sync = { auto_write = true },
+      parser = {
+        preserve_code_fences = false, -- 设为 true 时上传原始 ``` 围栏文本
+      },
       ui = {
         floating = false,
         open_in_tab = true,
@@ -109,6 +112,9 @@ require("notion").setup({
   },
   default_database = "CMake学习",
   sync = { auto_write = true },
+  parser = {
+    preserve_code_fences = false, -- true 保留 ``` 围栏为纯文本
+  },
   cache = { ttl = 60 }, -- 以秒为单位；设为 0 或负数禁用，设为 nil 则无限缓存
   ui = {
     floating = false,

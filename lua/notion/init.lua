@@ -29,6 +29,9 @@ local defaults = {
   tree_sitter = {
     language = "markdown",
   },
+  parser = {
+    preserve_code_fences = false,
+  },
   sync = {
     auto_write = true,
   },

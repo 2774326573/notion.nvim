@@ -56,6 +56,9 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
       default_database = "CMake Study",
       title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
       sync = { auto_write = true },
+      parser = {
+        preserve_code_fences = false, -- true keeps ```fences; false sends Notion code blocks
+      },
       ui = {
         floating = false,
         open_in_tab = true,
@@ -110,6 +113,9 @@ require("notion").setup({
   default_database = "CMake Study",
   sync = {
     auto_write = true,
+  },
+  parser = {
+    preserve_code_fences = false, -- set true to upload ``` fenced blocks verbatim
   },
   cache = {
     ttl = 60, -- seconds; set to 0 or negative to disable caching, nil for unlimited

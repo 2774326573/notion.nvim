@@ -74,7 +74,7 @@ function M.sync_buffer(bufnr)
 
   util.notify("[notion.nvim] Syncing page to Notion...", vim.log.levels.INFO)
 
-  local blocks = parser.buffer_to_blocks(bufnr, config.tree_sitter.language)
+  local blocks = parser.buffer_to_blocks(bufnr, config.tree_sitter.language, config.parser)
   if #blocks == 0 then
     local raw = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
     if raw:match("%S") then

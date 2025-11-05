@@ -1,5 +1,7 @@
 local M = {}
 
+local languages = require("notion.languages")
+
 local function get_node_text(node, bufnr)
   local text = vim.treesitter.get_node_text(node, bufnr)
   text = text:gsub("\r", "")
@@ -244,7 +246,10 @@ local function block_plain_text(block)
   return table.concat(parts, "")
 end
 
-local function collapse_markdown_fences(blocks)
+local function collapse_markdown_fences(blocks, opts)
+  if opts and opts.preserve_code_fences then
+    return blocks
+  end
   local out = {}
   local i = 1
   while i <= #blocks do
@@ -275,7 +280,7 @@ local function collapse_markdown_fences(blocks)
           j = j + 1
         end
         if closed then
-          table.insert(out, code_block(language, table.concat(body, "\n")))
+          table.insert(out, code_block(language, table.concat(body, "\n"), opts))
           i = j
           goto continue
         end
@@ -323,34 +328,63 @@ local function divider_block()
   return { object = "block", type = "divider", divider = vim.empty_dict() }
 end
 
-local function code_block(language, text)
-  local info = vim.trim(language or "")
-  local opener = info ~= "" and ("```%s"):format(info) or "```"
-  local body = (text or ""):gsub("\r", "")
-  local chunk = opener
-  if body ~= "" then
-    chunk = chunk .. "\n" .. body
-    if not body:match("\n$") then
+local function code_block(language, text, opts)
+  local preserve = opts and opts.preserve_code_fences
+  local content = (text or ""):gsub("\r", "")
+
+  if preserve then
+    local info = vim.trim(language or "")
+    local opener = info ~= "" and ("```%s"):format(info) or "```"
+    local chunk = opener
+    if content ~= "" then
+      chunk = chunk .. "\n" .. content
+      if not content:match("\n$") then
+        chunk = chunk .. "\n"
+      end
+    else
       chunk = chunk .. "\n"
     end
-  else
-    chunk = chunk .. "\n"
+    chunk = chunk .. "```"
+
+    local rich_text = {}
+    local max_length = 2000
+    local pos = 1
+    while pos <= #chunk do
+      local piece = chunk:sub(pos, pos + max_length - 1)
+      table.insert(rich_text, make_text_object(piece))
+      pos = pos + max_length
+    end
+
+    return {
+      object = "block",
+      type = "paragraph",
+      paragraph = {
+        rich_text = rich_text,
+      },
+    }
   end
-  chunk = chunk .. "```"
+
+  local normalized_language = languages.normalize(language and vim.trim(language) or language)
 
   local rich_text = {}
   local max_length = 2000
   local pos = 1
-  while pos <= #chunk do
-    local piece = chunk:sub(pos, pos + max_length - 1)
-    table.insert(rich_text, make_text_object(piece))
-    pos = pos + max_length
+
+  if content == "" then
+    table.insert(rich_text, make_text_object("", { code = true }))
+  else
+    while pos <= #content do
+      local piece = content:sub(pos, pos + max_length - 1)
+      table.insert(rich_text, make_text_object(piece, { code = true }))
+      pos = pos + max_length
+    end
   end
 
   return {
     object = "block",
-    type = "paragraph",
-    paragraph = {
+    type = "code",
+    code = {
+      language = normalized_language,
       rich_text = rich_text,
     },
   }
@@ -470,7 +504,7 @@ local function extract_fenced_code(text)
     content = content,
   }
 end
-local function fallback_blocks(bufnr)
+local function fallback_blocks(bufnr, opts)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local blocks = {}
   local chunk = {}
@@ -568,7 +602,7 @@ local function fallback_blocks(bufnr)
     if not in_code_block then
       return
     end
-    table.insert(blocks, code_block(code_language, table.concat(code_lines, "\n")))
+    table.insert(blocks, code_block(code_language, table.concat(code_lines, "\n"), opts))
     in_code_block = false
     code_fence = nil
     code_language = ""
@@ -614,12 +648,12 @@ local function fallback_blocks(bufnr)
   return blocks
 end
 
-parse_list = function(node, bufnr)
+parse_list = function(node, bufnr, opts)
   local items = {}
   for i = 0, node:named_child_count() - 1 do
     local child = node:named_child(i)
     if child:type() == "list_item" then
-      local block = parse_list_item(child, bufnr)
+      local block = parse_list_item(child, bufnr, opts)
       if block then
         table.insert(items, block)
       end
@@ -628,7 +662,7 @@ parse_list = function(node, bufnr)
   return items
 end
 
-parse_list_item = function(node, bufnr)
+parse_list_item = function(node, bufnr, opts)
   local marker = node:child(0)
   local marker_type = marker and marker:type() or ""
 
@@ -654,17 +688,17 @@ parse_list_item = function(node, bufnr)
     if ctype == "paragraph" then
       text = get_node_text(child, bufnr):gsub("\n", " ")
     elseif ctype == "list" then
-      children = parse_list(child, bufnr)
+      children = parse_list(child, bufnr, opts)
     end
   end
 
   return list_block(block_type, text, children, { checked = checked })
 end
 
-local function parse_children(blocks, node, bufnr)
+local function parse_children(blocks, node, bufnr, opts)
   for i = 0, node:named_child_count() - 1 do
     local child = node:named_child(i)
-    local block = parse_node(child, bufnr)
+    local block = parse_node(child, bufnr, opts)
     if block then
       if vim.tbl_islist(block) then
         for _, nested in ipairs(block) do
@@ -677,7 +711,7 @@ local function parse_children(blocks, node, bufnr)
   end
 end
 
-parse_node = function(node, bufnr)
+parse_node = function(node, bufnr, opts)
   local ntype = node:type()
 
   if ntype == "paragraph" then
@@ -693,7 +727,7 @@ parse_node = function(node, bufnr)
     end
     local fenced = extract_fenced_code(text)
     if fenced then
-      return code_block(fenced.language, fenced.content)
+      return code_block(fenced.language, fenced.content, opts)
     end
     return paragraph_block(text)
   elseif ntype == "atx_heading" then
@@ -713,10 +747,10 @@ parse_node = function(node, bufnr)
         text = get_node_text(child, bufnr)
       end
     end
-    return code_block(language, text)
+    return code_block(language, text, opts)
   elseif ntype == "indented_code_block" then
     local text = get_node_text(node, bufnr)
-    return code_block("plain text", text)
+    return code_block("plain text", text, opts)
   elseif ntype == "block_quote" then
     local raw = get_node_text(node, bufnr)
     local lines = {}
@@ -728,7 +762,7 @@ parse_node = function(node, bufnr)
   elseif ntype == "thematic_break" then
     return divider_block()
   elseif ntype == "list" then
-    return parse_list(node, bufnr)
+    return parse_list(node, bufnr, opts)
   elseif ntype == "empty" then
     return nil
   elseif ntype == "html_block" then
@@ -817,7 +851,7 @@ local function count_fenced_code_in_buffer(bufnr)
   return expected
 end
 
-function M.buffer_to_blocks(bufnr, language)
+function M.buffer_to_blocks(bufnr, language, opts)
   language = language or "markdown"
   local ok, parser_or_err = pcall(vim.treesitter.get_parser, bufnr, language)
   if not ok then
@@ -835,16 +869,16 @@ function M.buffer_to_blocks(bufnr, language)
   local root = tree:root()
 
   local blocks = {}
-  parse_children(blocks, root, bufnr)
-  blocks = collapse_markdown_fences(blocks)
+  parse_children(blocks, root, bufnr, opts)
+  blocks = collapse_markdown_fences(blocks, opts)
   local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
   local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
   if #blocks == 0
     or (expected_code_blocks > 0 and (actual_code_blocks < expected_code_blocks or fencey_code_blocks > 0))
   then
-    blocks = fallback_blocks(bufnr)
-    blocks = collapse_markdown_fences(blocks)
+    blocks = fallback_blocks(bufnr, opts)
+    blocks = collapse_markdown_fences(blocks, opts)
   end
   return blocks
 end
