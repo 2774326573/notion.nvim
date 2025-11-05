@@ -45,6 +45,13 @@ end, {
   desc = "Set Notion API token",
 })
 
+vim.api.nvim_create_user_command("NotionRefreshPages", function(opts)
+  notion.refresh_pages(opts)
+end, {
+  nargs = "?",
+  desc = "Refresh the cached page list for the current database",
+})
+
 vim.api.nvim_create_user_command("NotionSelectDatabase", function()
   notion.select_database()
 end, {

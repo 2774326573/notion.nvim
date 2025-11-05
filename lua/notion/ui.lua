@@ -1,4 +1,3 @@
-local api = require("notion.api")
 local renderer = require("notion.renderer")
 local buffer = require("notion.buffer")
 local util = require("notion.util")
@@ -6,17 +5,23 @@ local notion = require("notion")
 
 local M = {}
 
-function M.select_page(opts)
-  local config = notion.get_config()
-  local pages, err = api.list_pages(config, opts)
-  if not pages then
-    util.notify("[notion.nvim] Failed listing pages: " .. err, vim.log.levels.ERROR)
-    return
+function M.select_page(pages, opts)
+  if not vim.tbl_islist(pages) then
+    opts = pages or {}
+    local fetched = notion.fetch_pages(opts)
+    if not fetched then
+      return
+    end
+    pages = fetched
+  else
+    opts = opts or {}
   end
-  if #pages == 0 then
+
+  if not pages or #pages == 0 then
     util.notify("[notion.nvim] No pages returned from Notion query.", vim.log.levels.INFO)
     return
   end
+  local config = notion.get_config()
 
   local items = {}
   for _, page in ipairs(pages) do
@@ -46,4 +51,3 @@ function M.new_page()
 end
 
 return M
-

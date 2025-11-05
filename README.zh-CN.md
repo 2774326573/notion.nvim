@@ -21,6 +21,7 @@
 - **标签页友好：** 无论是列表选择还是指定 ID，页面都会在新的 Neovim 标签页中打开。
 - **内置新建：** 通过 `:NotionNew` 直接在数据库中新建页面并立刻编辑。
 - **自动同步：** 保存（`:w`）或执行 `:NotionSync` 即可把改动推回 Notion。
+- **页面缓存：** 页面列表会在内存中缓存（可配置 TTL），避免每次切换都重新请求；需要时可用 `:NotionRefreshPages` 强制刷新。
 - **tree-sitter 管线：** Markdown ↔ Notion Block 转换安全可靠，无法解析的内容会退化为普通段落。
 - **多数据库支持：** 在配置中声明多个数据库，使用 `:NotionSelectDatabase` 快速切换；插件会在会话之间记住你上次选择的数据库。
 
@@ -89,6 +90,7 @@
 | `:NotionNew` | 新建页面并立即打开 |
 | `:NotionSync` | 手动同步当前缓冲区 |
 | `:NotionSetToken` | 弹窗输入并保存 API 密钥 |
+| `:NotionRefreshPages` | 清除当前数据库缓存并重新获取 |
 | `:NotionSelectDatabase` | 多数据库环境下切换当前数据库 |
 
 ## 配置参考
@@ -106,12 +108,15 @@ require("notion").setup({
   },
   default_database = "CMake学习",
   sync = { auto_write = true },
+  cache = { ttl = 60 }, -- 以秒为单位；设为 0 或负数禁用，设为 nil 则无限缓存
   ui = {
     floating = false,
     open_in_tab = true,
   },
 })
 ```
+
+`cache.ttl` 用来控制页面列表的缓存时间（秒）。设置为正数（默认 60）代表在该时间内复用数据，设为 0 或负数禁用缓存，设为 `nil` 则不限时缓存。
 
 ## 多数据库示例
 

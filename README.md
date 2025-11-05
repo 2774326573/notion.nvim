@@ -21,6 +21,7 @@
 - **Tab-friendly UI:** open any page (picker or explicit ID) in a new Neovim tab instead of a floating window.
 - **Inline authoring:** create database entries directly with `:NotionNew`, edit in place, and sync on `:w`.
 - **Automatic sync:** write the buffer or run `:NotionSync` to push updates back to Notion.
+- **Cached listings:** avoid refetching large databases by caching results (configurable TTL); use `:NotionRefreshPages` to force a refresh.
 - **Tree-sitter pipeline:** Markdown-to-Notion block conversion with safe fallbacks for unsupported content.
 - **Multi-database aware:** declare several databases and switch with `:NotionSelectDatabase`; the plugin remembers your last choice across sessions.
 
@@ -89,6 +90,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:NotionNew` | Prompt for a title, create a page, then open it. |
 | `:NotionSync` | Force a sync of the current buffer back to Notion. |
 | `:NotionSetToken` | Prompt for and persist the API token via `vim.ui.input`. |
+| `:NotionRefreshPages` | Clear the cached listing for the current database and refetch it. |
 | `:NotionSelectDatabase` | Pick the active database when multiple are configured. |
 
 ## Configuration reference
@@ -108,12 +110,17 @@ require("notion").setup({
   sync = {
     auto_write = true,
   },
+  cache = {
+    ttl = 60, -- seconds; set to 0 or negative to disable caching, nil for unlimited
+  },
   ui = {
     floating = false,
     open_in_tab = true,
   },
 })
 ```
+
+`cache.ttl` controls how long (in seconds) the page list stays in memory. Set it to a positive number (default `60`) to reuse results, `0` or a negative number to disable caching, or `nil` for unlimited caching.
 
 ## Multiple databases
 

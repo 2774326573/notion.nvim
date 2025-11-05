@@ -1,5 +1,9 @@
 local M = {}
 
+local api = require("notion.api")
+local util = require("notion.util")
+local os_time = os.time
+
 local state = {
   config = nil,
   autocmd_id = nil,
@@ -7,6 +11,7 @@ local state = {
   databases = {},
   current_database = nil,
   default_title_property = nil,
+  page_cache = {},
 }
 
 local data_root = (vim.fn.stdpath("data") or ".") .. "/notion.nvim"
@@ -36,6 +41,9 @@ local defaults = {
   },
   databases = nil,
   default_database = nil,
+  cache = {
+    ttl = 60,
+  },
 }
 
 local function ensure_data_dir()
@@ -356,18 +364,77 @@ function M.ensure_token(opts)
   return ensure_token(state.config, opts)
 end
 
-function M.list_pages(opts)
+function M.fetch_pages(opts)
+  opts = opts or {}
   if not ensure_setup() then
-    return
+    return nil, "setup"
   end
   local config = state.config
   if not ensure_token(config) then
+    return nil, "token"
+  end
+  if not ensure_database_selected(opts) then
+    return nil, "database"
+  end
+
+  local db_id = config.database_id
+  local cache_entry = state.page_cache[db_id]
+  local ttl = config.cache and config.cache.ttl
+  local now = os_time()
+  if cache_entry and not opts.refresh then
+    if ttl == nil then
+      return cache_entry.items
+    elseif ttl > 0 and (now - cache_entry.time) <= ttl then
+      return cache_entry.items
+    end -- ttl <= 0 disables caching
+  end
+
+  local query_opts = opts
+  if opts.refresh ~= nil then
+    query_opts = vim.tbl_deep_extend("force", {}, opts)
+    query_opts.refresh = nil
+  end
+
+  local pages, err = api.list_pages(config, query_opts)
+  if not pages then
+    if err then
+      util.notify("[notion.nvim] Failed listing pages: " .. err, vim.log.levels.ERROR)
+    end
+    return nil, err
+  end
+  state.page_cache[db_id] = { items = pages, time = now }
+  return pages
+end
+
+function M.clear_page_cache(database_id)
+  if not ensure_setup() then
+    return
+  end
+  local db = database_id or (state.current_database and state.current_database.id)
+  if not db then
+    return
+  end
+  state.page_cache[db] = nil
+end
+
+function M.list_pages(opts)
+  local pages = M.fetch_pages(opts)
+  if not pages then
+    return
+  end
+  require("notion.ui").select_page(pages, opts or {})
+end
+
+function M.refresh_pages(opts)
+  opts = opts or {}
+  if not ensure_setup() then
     return
   end
   if not ensure_database_selected(opts) then
     return
   end
-  require("notion.ui").select_page(opts or {})
+  M.clear_page_cache()
+  M.list_pages(vim.tbl_deep_extend("force", {}, opts, { refresh = true }))
 end
 
 function M.open_page(page_id)
