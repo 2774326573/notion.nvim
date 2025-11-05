@@ -68,8 +68,9 @@
 
 1. 在 Notion 创建内部集成，并复制集成密钥。
 2. 将目标数据库（或单独页面）分享给该集成，并授予“可编辑”权限。
-3. 启动 Neovim 前设置环境变量：
-   - `NOTION_API_TOKEN`：集成密钥。
+3. 提供 API 密钥（任选其一）：
+   - 在启动前设置 `NOTION_API_TOKEN`；
+   - 或运行 `:NotionSetToken`（通过 `vim.ui.input` 弹窗输入，Windows/macOS/Linux 均适用，并会将密钥保存到 `stdpath('data')/notion.nvim/token.txt`；缺少密钥时相关命令会自动弹窗）。
    - 可选 `NOTION_TITLE_PROPERTY`：若标题列不是 `"Name"`。
 4. 安装 tree-sitter 语法：`:TSInstall markdown markdown_inline`。
 5. 重启 Neovim，并尝试：
@@ -87,6 +88,7 @@
 | `:NotionOpen {page_id}` | 根据页面 ID 直接打开 |
 | `:NotionNew` | 新建页面并立即打开 |
 | `:NotionSync` | 手动同步当前缓冲区 |
+| `:NotionSetToken` | 弹窗输入并保存 API 密钥 |
 | `:NotionSelectDatabase` | 多数据库环境下切换当前数据库 |
 
 ## 配置参考

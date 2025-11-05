@@ -68,8 +68,9 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 1. Create a Notion internal integration and copy its secret token.
 2. Share the database (or specific pages) with that integration and grant **Can edit** permissions.
-3. Export environment variables before launching Neovim:
-   - `NOTION_API_TOKEN` – integration secret.
+3. Provide your API token in one of the following ways:
+   - Set `NOTION_API_TOKEN` before launching Neovim, or
+   - Run `:NotionSetToken` (uses `vim.ui.input`; works on Windows, macOS, and Linux, persisting the token to `stdpath('data')/notion.nvim/token.txt`; commands that need the token will prompt automatically if it's missing).
    - Optional: `NOTION_TITLE_PROPERTY` if your title column is not `"Name"`.
 4. Install tree-sitter grammars: `:TSInstall markdown markdown_inline`.
 5. Restart Neovim and try:
@@ -87,6 +88,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:NotionOpen {page_id}` | Open a page directly by its Notion id. |
 | `:NotionNew` | Prompt for a title, create a page, then open it. |
 | `:NotionSync` | Force a sync of the current buffer back to Notion. |
+| `:NotionSetToken` | Prompt for and persist the API token via `vim.ui.input`. |
 | `:NotionSelectDatabase` | Pick the active database when multiple are configured. |
 
 ## Configuration reference

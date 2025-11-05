@@ -9,7 +9,9 @@ local state = {
   default_title_property = nil,
 }
 
-local last_database_path = (vim.fn.stdpath("data") or ".") .. "/notion.nvim/last_database.txt"
+local data_root = (vim.fn.stdpath("data") or ".") .. "/notion.nvim"
+local last_database_path = data_root .. "/last_database.txt"
+local token_path = data_root .. "/token.txt"
 
 local defaults = {
   token = nil,
@@ -68,6 +70,36 @@ local function save_last_database(id)
   pcall(function()
     local fd = assert(io.open(last_database_path, "w"))
     fd:write(id)
+    fd:close()
+  end)
+end
+
+local function load_token()
+  local ok, content = pcall(function()
+    local fd = io.open(token_path, "r")
+    if not fd then
+      return nil
+    end
+    local data = fd:read("*l")
+    fd:close()
+    if not data or data == "" then
+      return nil
+    end
+    return vim.trim(data)
+  end)
+  if ok then
+    return content
+  end
+end
+
+local function save_token(token)
+  if not token or token == "" then
+    return
+  end
+  ensure_data_dir()
+  pcall(function()
+    local fd = assert(io.open(token_path, "w"))
+    fd:write(token)
     fd:close()
   end)
 end
@@ -191,6 +223,12 @@ local function resolve_token(config)
       return env_token
     end
   end
+  local file_token = load_token()
+  if file_token and file_token ~= "" then
+    config.token = file_token
+    state.token_warned = false
+    return file_token
+  end
   return nil
 end
 
@@ -203,17 +241,11 @@ local function ensure_setup()
 end
 
 local function ensure_token(config, opts)
-  if not resolve_token(config) then
-    if not (opts and opts.silent) then
-      if not state.token_warned then
-        local msg = "[notion.nvim] Notion API token is missing. Set `token` in setup() or provide it via $" .. (config.token_env or "NOTION_API_TOKEN") .. "."
-        vim.notify(msg, vim.log.levels.WARN)
-        state.token_warned = true
-      end
-    end
-    return false
+  if resolve_token(config) then
+    return true
   end
-  return true
+  M.set_token({ silent = opts and opts.silent })
+  return false
 end
 
 function M.setup(opts)
@@ -393,6 +425,30 @@ function M.select_database()
     end
     apply_database(choice.db)
     vim.notify("[notion.nvim] Switched to database: " .. (choice.db.name or choice.db.id), vim.log.levels.INFO)
+  end)
+end
+
+function M.set_token(opts)
+  opts = opts or {}
+  if not ensure_setup() then
+    return
+  end
+  vim.ui.input({
+    prompt = "Notion API token: ",
+    default = state.config.token or "",
+  }, function(value)
+    if value and value ~= "" then
+      save_token(value)
+      state.config.token = value
+      state.token_warned = false
+      if not opts.silent then
+        vim.notify("[notion.nvim] Token saved.", vim.log.levels.INFO)
+      end
+    else
+      if not opts.silent then
+        vim.notify("[notion.nvim] Token not updated.", vim.log.levels.INFO)
+      end
+    end
   end)
 end
 
