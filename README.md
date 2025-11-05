@@ -1,22 +1,33 @@
 # notion.nvim
 
-[English](README.md) | [中文](README.zh-CN.md)
+> Bring Notion into Neovim: search pages, edit them as Markdown, and sync changes back with a single write.
 
-Integrate Notion with Neovim. Browse database pages, open them as Markdown buffers, and sync edits back to Notion – powered by the official Notion API and Neovim's tree-sitter Markdown parser.
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Configuration reference](#configuration-reference)
+- [Buffer lifecycle](#buffer-lifecycle)
+- [Notes and limitations](#notes-and-limitations)
+- [License](#license)
 
 ## Features
-- List pages from a configured Notion database via `:NotionList`
-- Open a page in a scratch Markdown buffer with `:NotionOpen {page_id}`
-- Create a new page in the database using `:NotionNew`
-- Sync changes from the current buffer back to Notion blocks with `:NotionSync`
-- Automatic sync on write (configurable)
-- Markdown ⇄ Notion block conversion driven by Neovim's tree-sitter (`markdown` parser)
+
+- **Page picker** – list database pages via `:NotionList` or the recency-sorted `:NotionListRecent`.
+- **Tab-friendly UI** – open any page (picker or explicit ID) in a new Neovim tab instead of a floating window.
+- **Inline authoring** – create database entries directly with `:NotionNew`, edit in place, and sync on `:w`.
+- **Automatic sync** – write the buffer or run `:NotionSync` to push updates back to Notion.
+- **Tree-sitter pipeline** – Markdown → Notion block conversion with safe fallbacks for unsupported content.
 
 ## Requirements
-- Neovim 0.9+ (0.10+ recommended for `vim.system`)
-- [`tree-sitter-markdown`](https://github.com/MDeiml/tree-sitter-markdown) installed (e.g. via [`nvim-treesitter`](https://github.com/nvim-treesitter/nvim-treesitter))
-- Curl executable available in your `$PATH`
-- Notion integration token with access to the target database
+
+- Neovim 0.9 or newer (0.10+ recommended for `vim.system`).
+- `tree-sitter-markdown` **and** `markdown_inline` grammars (for example via [`nvim-treesitter`](https://github.com/nvim-treesitter/nvim-treesitter)).
+- `curl` available in your `PATH`.
+- A Notion integration token that can **read** and **update** the target database/pages.
 
 ## Installation
 
@@ -28,40 +39,62 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
-      database_id = "YOUR_DATABASE_ID",
-      title_property = "Name", -- adapt to your database title property
-      sync = {
-        auto_write = true,
+      database_id = os.getenv("NOTION_DATABASE_ID"),
+      title_property = "Name", -- update if your title column has a different name
+      sync = { auto_write = true },
+      ui = {
+        floating = false,
+        open_in_tab = true,
       },
     })
   end,
 }
 ```
 
-## Commands
-- `:NotionList` – interactive picker (uses `vim.ui.select`) to choose and open a page
-- `:NotionOpen {page_id}` – open a page directly by Notion page ID
-- `:NotionNew` – prompt for a title, create a new page, and open it
-- `:NotionSync` – parse the current buffer with tree-sitter and push it to Notion
+## Quick start
 
-## Configuration
+1. Create a Notion internal integration and copy its secret token.
+2. Share the database (or specific pages) with that integration and grant **Can edit** permissions.
+3. Export environment variables before launching Neovim:
+   - `NOTION_API_TOKEN` – integration secret.
+   - `NOTION_DATABASE_ID` – 32-character id from the database URL (strip dashes).
+   - Optional: `NOTION_TITLE_PROPERTY` if your title column is not `"Name"`.
+4. Install tree-sitter grammars: `:TSInstall markdown markdown_inline`.
+5. Restart Neovim and try:
+   - `:NotionListRecent` to choose a page.
+   - `:NotionOpen <page_id>` to jump straight to a known page.
+   - `:NotionNew` to create and open a fresh page.
+6. Edit as Markdown and write (`:w`) to sync back to Notion.
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `:NotionList` | List pages using `vim.ui.select`. |
+| `:NotionListRecent` | List pages sorted by `last_edited_time`. |
+| `:NotionOpen {page_id}` | Open a page directly by its Notion id. |
+| `:NotionNew` | Prompt for a title, create a page, then open it. |
+| `:NotionSync` | Force a sync of the current buffer back to Notion. |
+
+## Configuration reference
 
 ```lua
 require("notion").setup({
-  token = os.getenv("NOTION_API_TOKEN"), -- optional if token_env resolves it
-  token_env = "NOTION_API_TOKEN",        -- environment variable to fallback to
-  database_id = "YOUR_DATABASE_ID",      -- required
-  title_property = "Name",               -- name of the title property in the database
-  notion_version = "2022-06-28",         -- override if Notion updates API version
-  timeout = 20000,                       -- curl timeout in milliseconds
+  token = os.getenv("NOTION_API_TOKEN"),
+  token_env = "NOTION_API_TOKEN",
+  database_id = os.getenv("NOTION_DATABASE_ID"),
+  title_property = os.getenv("NOTION_TITLE_PROPERTY") or "Name",
+  notion_version = "2022-06-28",
+  timeout = 20000,
   tree_sitter = {
-    language = "markdown",               -- tree-sitter language to parse buffers
+    language = "markdown",
   },
   sync = {
-    auto_write = true,                   -- automatically sync on BufWritePost
+    auto_write = true,
   },
   ui = {
-    floating = true,                     -- use floating window when opening pages
+    floating = false,
+    open_in_tab = true,
     width = 0.8,
     height = 0.8,
     border = "rounded",
@@ -69,23 +102,18 @@ require("notion").setup({
 })
 ```
 
-### Tree-sitter
-The plugin relies on Neovim's tree-sitter integration to understand Markdown structure. Ensure the `markdown` parser is installed, and your `filetype` is set to `markdown` in Notion buffers. The parser powers both block generation during sync and lightweight structural queries (e.g. headings, lists, quotes, code fences).
-
-### Token provisioning
-`token` can be provided directly in `setup()` or via an environment variable referenced by `token_env` (defaults to `NOTION_API_TOKEN`). If neither is available, the plugin keeps running but commands that talk to the API will warn and abort until a token is resolved.
-
 ## Buffer lifecycle
-- Buffers are scratch (`buftype=""`, `bufhidden="wipe"`) and named `notion://{page_id}` for easier identification.
-- Page metadata (`page_id`, `version`, cached blocks) is stored in buffer variables.
-- When sync succeeds the cache refreshes, ensuring subsequent updates only re-upload new content.
 
-## Notes / Limitations
-- Only a subset of Notion block types is currently supported (headings, paragraphs, bulleted/numbered lists, quotes, code blocks, to-dos).
-- Rich text annotations (bold/italic/underline/code/link) round-trip where possible; unsupported annotations degrade to plain text.
-- Database templates are not fetched automatically; customise `:NotionNew` logic if you require more properties.
-- For large pages, syncing may take a few seconds due to block archival + append semantics.
+- Buffers are scratch (`buftype="acwrite"`, `bufhidden="wipe"`) and named `notion://{page_id}`.
+- Page metadata (id, title, cached blocks) is stored on `vim.b`.
+- Successful syncs refresh the cached blocks to minimise future payloads.
+
+## Notes and limitations
+
+- Currently supports common block types: headings, paragraphs, lists, quotes, code blocks, to-dos.
+- Unsupported blocks fall back to plain paragraphs to avoid data loss.
+- Large pages may take a few seconds to archive old content and append new blocks due to Notion API semantics.
 
 ## License
+
 MIT
-"# notion.nvim" 

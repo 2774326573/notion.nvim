@@ -21,6 +21,7 @@ local defaults = {
   },
   ui = {
     floating = true,
+    open_in_tab = false,
     width = 0.8,
     height = 0.8,
     border = "rounded",

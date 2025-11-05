@@ -60,6 +60,13 @@ end
 
 local function open_window(bufnr, config, opts)
   opts = opts or {}
+  if config.ui.open_in_tab then
+    vim.cmd("tab split")
+    local win = vim.api.nvim_get_current_win()
+    vim.api.nvim_buf_set_option(bufnr, "buflisted", true)
+    vim.api.nvim_win_set_buf(win, bufnr)
+    return
+  end
   if config.ui.floating then
     local width = math.floor(vim.o.columns * config.ui.width)
     local height = math.floor(vim.o.lines * config.ui.height)
@@ -142,9 +149,10 @@ function M.new_page()
       util.notify("[notion.nvim] Failed creating page: " .. err, vim.log.levels.ERROR)
       return
     end
-    util.notify("[notion.nvim] Page created. Opening buffer…", vim.log.levels.INFO)
+    util.notify("[notion.nvim] Page created. Opening buffer...", vim.log.levels.INFO)
     M.open_page(page.id)
   end)
 end
 
 return M
+
