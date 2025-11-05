@@ -136,6 +136,17 @@ function M.retrieve_page(page_id, config)
   return response, nil
 end
 
+function M.retrieve_database(database_id, config)
+  if not database_id or database_id == "" then
+    return nil, "Database ID is required."
+  end
+  local response, err = request("GET", "databases/" .. util.norm_id(database_id), config)
+  if not response then
+    return nil, err
+  end
+  return response, nil
+end
+
 function M.retrieve_blocks(block_id, config)
   local accumulator = {}
   local cursor = nil
