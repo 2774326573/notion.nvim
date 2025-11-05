@@ -175,11 +175,27 @@ local function divider_block()
 end
 
 local function code_block(language, text)
+  -- Notion API has a 2000 character limit per rich_text item
+  -- Split long code into multiple text objects
+  local rich_text = {}
+  local max_length = 2000
+  
+  if #text <= max_length then
+    table.insert(rich_text, text_object(text))
+  else
+    local pos = 1
+    while pos <= #text do
+      local chunk = text:sub(pos, pos + max_length - 1)
+      table.insert(rich_text, text_object(chunk))
+      pos = pos + max_length
+    end
+  end
+  
   return {
     object = "block",
     type = "code",
     code = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
       language = normalize_language(language),
     },
   }
