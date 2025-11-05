@@ -22,6 +22,35 @@ local function notion_text_object(text)
   }
 end
 
+local function rich_text_plain(rich_text)
+  local parts = {}
+  for _, node in ipairs(rich_text or {}) do
+    local value = node.plain_text or (node.text and node.text.content) or ""
+    table.insert(parts, value)
+  end
+  return table.concat(parts, "")
+end
+
+local function clear_placeholder_heading(page_id, title, config)
+  if not title or title == "" then
+    return
+  end
+  local blocks = api.retrieve_blocks(page_id, config)
+  if not blocks or #blocks ~= 1 then
+    return
+  end
+  local block = blocks[1]
+  if block.type ~= "heading_1" then
+    return
+  end
+  local payload = block.heading_1 or {}
+  local text = rich_text_plain(payload.rich_text)
+  if vim.trim(text) ~= vim.trim(title) then
+    return
+  end
+  api.update_block(block.id, config, { archived = true })
+end
+
 local function hydrate_children(block, config)
   if not block or not block.has_children then
     return
@@ -157,6 +186,7 @@ function M.new_page()
       util.notify("[notion.nvim] Failed creating page: " .. err, vim.log.levels.ERROR)
       return
     end
+    clear_placeholder_heading(page.id, input, config)
     util.notify("[notion.nvim] Page created. Opening buffer...", vim.log.levels.INFO)
     M.open_page(page.id)
   end)
