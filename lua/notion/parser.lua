@@ -335,28 +335,28 @@ local function code_block(language, text, opts)
   local content = (text or ""):gsub("\r", "")
 
   if preserve then
+    local function wrap_line(line)
+      return ZERO_WIDTH_SPACE .. line .. ZERO_WIDTH_SPACE
+    end
+    local function pad_empty(line)
+      if line == "" then
+        return ZERO_WIDTH_SPACE
+      end
+      return line
+    end
     local info = vim.trim(language or "")
     local opener = info ~= "" and ("```%s"):format(info) or "```"
-    local chunk = opener
+    local chunk = wrap_line(opener)
     if content ~= "" then
-      chunk = chunk .. "\n" .. content
-      if not content:match("\n$") then
-        chunk = chunk .. "\n"
+      local lines = vim.split(content, "\n", { plain = true, trimempty = false })
+      for _, line in ipairs(lines) do
+        chunk = chunk .. "\n" .. wrap_line(pad_empty(line))
       end
+      chunk = chunk .. "\n"
     else
       chunk = chunk .. "\n"
     end
-    chunk = chunk .. "```"
-
-    local processed_lines = {}
-    for _, line in ipairs(vim.split(chunk, "\n", { plain = true, trimempty = false })) do
-      if line:match("^%s*[`~]{3,}.*$") then
-        table.insert(processed_lines, ZERO_WIDTH_SPACE .. line)
-      else
-        table.insert(processed_lines, line)
-      end
-    end
-    chunk = table.concat(processed_lines, "\n")
+    chunk = chunk .. wrap_line("```")
 
     local rich_text = {}
     local max_length = 2000
