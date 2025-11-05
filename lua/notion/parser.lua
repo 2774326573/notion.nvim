@@ -845,6 +845,10 @@ end
 
 function M.buffer_to_blocks(bufnr, language)
   language = language or "markdown"
+  local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
+  if expected_code_blocks > 0 then
+    return collapse_markdown_fences(fallback_blocks(bufnr))
+  end
   local ok, parser_or_err = pcall(vim.treesitter.get_parser, bufnr, language)
   if not ok then
     vim.schedule(function()
@@ -863,7 +867,6 @@ function M.buffer_to_blocks(bufnr, language)
   local blocks = {}
   parse_children(blocks, root, bufnr)
   blocks = collapse_markdown_fences(blocks)
-  local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
   local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
   if #blocks == 0
