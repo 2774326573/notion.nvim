@@ -33,6 +33,7 @@ local function text_object(text)
   return {
     type = "text",
     text = { content = text },
+    plain_text = text,
     annotations = annotations_defaults(),
   }
 end
@@ -195,6 +196,7 @@ local function paragraph_block(text, annotations)
         {
           type = "text",
           text = { content = text },
+          plain_text = text,
           annotations = ann,
         },
       },
