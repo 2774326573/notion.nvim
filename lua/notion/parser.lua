@@ -469,8 +469,35 @@ local function fallback_blocks(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local blocks = {}
   local chunk = {}
+  local list_stack = {}
 
-  local function flush_paragraph()
+  local function clear_list_stack()
+    list_stack = {}
+  end
+
+  local function attach_list_block(block, indent)
+    while #list_stack > 0 and indent <= list_stack[#list_stack].indent do
+      table.remove(list_stack)
+    end
+    local parent = list_stack[#list_stack]
+    if parent then
+      local payload = parent.block[parent.block.type]
+      payload.children = payload.children or {}
+      table.insert(payload.children, block)
+    else
+      table.insert(blocks, block)
+    end
+    table.insert(list_stack, { indent = indent, block = block })
+  end
+
+  local function indent_width(prefix)
+    if prefix:find("\t") then
+      prefix = prefix:gsub("\t", "    ")
+    end
+    return #prefix
+  end
+
+  local function flush_paragraph(clear_lists)
     if #chunk == 0 then
       return
     end
@@ -500,6 +527,9 @@ local function fallback_blocks(bufnr)
       end
     end
     chunk = {}
+    if clear_lists ~= false then
+      clear_list_stack()
+    end
   end
 
   local function push_heading(line)
@@ -511,32 +541,39 @@ local function fallback_blocks(bufnr)
     local level = math.min(#hashes, 3)
     content = content ~= "" and content or "Untitled"
     table.insert(blocks, heading_block(level, content))
+    clear_list_stack()
     return true
   end
 
   local function push_simple_list(line)
-    local todo_mark, todo_text = line:match("^%s*[-*+]%s*%[(%u?%l?)%]%s*(.*)$")
-    if todo_mark then
-      flush_paragraph()
+    local todo_ws, todo_mark, todo_text = line:match("^(%s*)[-*+]%s*%[([xX%s])%]%s*(.*)$")
+    if todo_ws then
+      flush_paragraph(false)
+      local indent = indent_width(todo_ws)
       local checked = todo_mark == "x" or todo_mark == "X"
       todo_text = todo_text ~= "" and todo_text or " "
-      table.insert(blocks, list_block("to_do", todo_text, nil, { checked = checked }))
+      local block = list_block("to_do", todo_text, nil, { checked = checked })
+      attach_list_block(block, indent)
       return true
     end
 
-    local bullet_text = line:match("^%s*[-*+]%s+(.*)$")
-    if bullet_text then
-      flush_paragraph()
+    local bullet_ws, bullet_text = line:match("^(%s*)[-*+]%s+(.*)$")
+    if bullet_ws then
+      flush_paragraph(false)
+      local indent = indent_width(bullet_ws)
       bullet_text = bullet_text ~= "" and bullet_text or " "
-      table.insert(blocks, list_block("bulleted_list_item", bullet_text))
+      local block = list_block("bulleted_list_item", bullet_text)
+      attach_list_block(block, indent)
       return true
     end
 
-    local number_text = line:match("^%s*%d+[%.%)]%s+(.*)$")
-    if number_text then
-      flush_paragraph()
+    local number_ws, number_text = line:match("^(%s*)%d+[%.%)]%s+(.*)$")
+    if number_ws then
+      flush_paragraph(false)
+      local indent = indent_width(number_ws)
       number_text = number_text ~= "" and number_text or " "
-      table.insert(blocks, list_block("numbered_list_item", number_text))
+      local block = list_block("numbered_list_item", number_text)
+      attach_list_block(block, indent)
       return true
     end
 
@@ -551,6 +588,7 @@ local function fallback_blocks(bufnr)
     flush_paragraph()
     content = content ~= "" and content or " "
     table.insert(blocks, quote_block(content))
+    clear_list_stack()
     return true
   end
 
@@ -558,6 +596,7 @@ local function fallback_blocks(bufnr)
     if line:match("^%s*[-*_][-%*_ ]*[-*_]%s*$") then
       flush_paragraph()
       table.insert(blocks, divider_block())
+      clear_list_stack()
       return true
     end
     return false
@@ -571,6 +610,7 @@ local function fallback_blocks(bufnr)
     flush_paragraph()
     local caption = parsed.alt ~= "" and parsed.alt or (parsed.title or "")
     table.insert(blocks, image_block(parsed.url, caption))
+    clear_list_stack()
     return true
   end
 
@@ -588,6 +628,7 @@ local function fallback_blocks(bufnr)
     code_fence = nil
     code_language = ""
     code_lines = {}
+    clear_list_stack()
   end
 
   for _, line in ipairs(lines) do
@@ -608,8 +649,12 @@ local function fallback_blocks(bufnr)
         code_lines = {}
       elseif line:match("^%s*$") then
         flush_paragraph()
+        clear_list_stack()
       else
         if not (push_heading(line) or push_simple_list(line) or push_quote(line) or push_divider(line) or push_image(line)) then
+          if #list_stack > 0 then
+            clear_list_stack()
+          end
           table.insert(chunk, line)
         end
       end
