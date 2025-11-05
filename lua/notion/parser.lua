@@ -2,6 +2,8 @@ local M = {}
 
 local languages = require("notion.languages")
 
+local ZERO_WIDTH_SPACE = string.char(226, 128, 139)
+
 local function get_node_text(node, bufnr)
   local text = vim.treesitter.get_node_text(node, bufnr)
   text = text:gsub("\r", "")
@@ -345,6 +347,8 @@ local function code_block(language, text, opts)
       chunk = chunk .. "\n"
     end
     chunk = chunk .. "```"
+
+    chunk = chunk:gsub("```", "`" .. ZERO_WIDTH_SPACE .. "``")
 
     local rich_text = {}
     local max_length = 2000
@@ -773,13 +777,16 @@ parse_node = function(node, bufnr, opts)
   return nil
 end
 
-local function analyze_code_blocks(blocks)
+local function analyze_code_blocks(blocks, opts)
   local total = 0
   local with_fences = 0
 
   local function chunk_contains_fence(text)
     if not text or text == "" then
       return false
+    end
+    if opts and opts.preserve_code_fences then
+      text = text:gsub(ZERO_WIDTH_SPACE, "")
     end
     for line in text:gmatch("[^\n]+") do
       if line:match("^%s*[`~]{3,}.*$") then
@@ -812,6 +819,9 @@ local function analyze_code_blocks(blocks)
         end
       elseif block.type == "paragraph" then
         local text = block_plain_text(block)
+        if opts and opts.preserve_code_fences then
+          text = text:gsub(ZERO_WIDTH_SPACE, "")
+        end
         if text:match("^%s*([`~]{3,}).*") then
           total = total + 1
         end
@@ -872,7 +882,7 @@ function M.buffer_to_blocks(bufnr, language, opts)
   parse_children(blocks, root, bufnr, opts)
   blocks = collapse_markdown_fences(blocks, opts)
   local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
-  local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
+  local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks, opts)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
   if #blocks == 0
     or (expected_code_blocks > 0 and (actual_code_blocks < expected_code_blocks or fencey_code_blocks > 0))

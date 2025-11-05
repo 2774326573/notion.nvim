@@ -1,6 +1,8 @@
 local util = require("notion.util")
 local languages = require("notion.languages")
 
+local ZERO_WIDTH_SPACE = string.char(226, 128, 139)
+
 local M = {}
 
 local function split_lines(text)
@@ -69,6 +71,7 @@ local function rich_text_to_markdown(rich_text)
   local segments = {}
   for _, node in ipairs(rich_text or {}) do
     local text = node.plain_text or node.text and node.text.content or ""
+    text = text:gsub(ZERO_WIDTH_SPACE, "")
     text = apply_annotations(text, node.annotations)
     local href = sanitize_href(node.href)
     if href then
@@ -83,6 +86,7 @@ local function rich_text_plain(rich_text)
   local segments = {}
   for _, node in ipairs(rich_text or {}) do
     local text = node.plain_text or node.text and node.text.content or ""
+    text = text:gsub(ZERO_WIDTH_SPACE, "")
     table.insert(segments, text)
   end
   return table.concat(segments, "")
