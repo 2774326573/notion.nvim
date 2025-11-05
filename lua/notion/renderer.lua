@@ -1,4 +1,5 @@
 local util = require("notion.util")
+local languages = require("notion.languages")
 
 local M = {}
 
@@ -188,7 +189,8 @@ function M.render_block(block, depth)
     append_wrapped(lines, indent .. "> ", rich_text_to_markdown(payload.rich_text))
     pad_blank(lines)
   elseif block_type == "code" then
-    table.insert(lines, ("```%s"):format(payload.language or ""))
+    local info_string = languages.display(payload.language)
+    table.insert(lines, ("```%s"):format(info_string))
     for _, line_text in ipairs(split_lines(rich_text_plain(payload.rich_text))) do
       table.insert(lines, line_text)
     end
