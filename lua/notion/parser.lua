@@ -67,7 +67,7 @@ local function parse_inline_markdown(text)
     return {}
   end
   -- Preserve fence markers and horizontal rules as plain text; they are handled elsewhere.
-  if text:match("^%s*([`~]{3,}).*") or text:match("^%s*---%s*$") or text:match("^%s*___%s*$") or text:match("^%s*\*\*\*%s*$") then
+    if text:match("^%s*([`~]{3,}).*$") or text:match("^%s*%-%-%-%s*$") or text:match("^%s*___%s*$") or text:match("^%s*%*%*%*%s*$") then
     return { make_text_object(text) }
   end
   local segments = {}
@@ -615,7 +615,7 @@ local function extract_fenced_code(text)
   if #lines < 3 then
     return nil
   end
-  local opener, info = lines[1]:match("^%s*([`~]{3,})(.*)$")
+    local opener, info = lines[1]:match("^%s*([`~]{3,})(.*)$")
   if not opener then
     return nil
   end
