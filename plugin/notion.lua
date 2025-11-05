@@ -38,6 +38,13 @@ end, {
   desc = "Sync current buffer back to Notion",
 })
 
+vim.api.nvim_create_user_command("NotionSetToken", function()
+  notion.set_token()
+end, {
+  nargs = 0,
+  desc = "Set Notion API token",
+})
+
 vim.api.nvim_create_user_command("NotionSelectDatabase", function()
   notion.select_database()
 end, {

@@ -12,6 +12,7 @@ local state = {
 local data_root = (vim.fn.stdpath("data") or ".") .. "/notion.nvim"
 local last_database_path = data_root .. "/last_database.txt"
 local token_path = data_root .. "/token.txt"
+local skip_prompt_path = data_root .. "/skip_token_prompt.txt"
 
 local defaults = {
   token = nil,
@@ -92,6 +93,37 @@ local function load_token()
   end
 end
 
+local function load_skip_prompt()
+  local ok, flag = pcall(function()
+    local fd = io.open(skip_prompt_path, "r")
+    if not fd then
+      return nil
+    end
+    local data = fd:read("*l")
+    fd:close()
+    return data == "1"
+  end)
+  if ok and flag then
+    return true
+  end
+  return false
+end
+
+local function save_skip_prompt(enabled)
+  ensure_data_dir()
+  if enabled then
+    pcall(function()
+      local fd = assert(io.open(skip_prompt_path, "w"))
+      fd:write("1")
+      fd:close()
+    end)
+  else
+    pcall(function()
+      os.remove(skip_prompt_path)
+    end)
+  end
+end
+
 local function save_token(token)
   if not token or token == "" then
     return
@@ -102,6 +134,7 @@ local function save_token(token)
     fd:write(token)
     fd:close()
   end)
+  save_skip_prompt(false)
 end
 
 local function normalize_database_entry(db)
@@ -241,10 +274,18 @@ local function ensure_setup()
 end
 
 local function ensure_token(config, opts)
-  if resolve_token(config) then
+  local token = resolve_token(config)
+  if token then
+    if state.token_warned then
+      state.token_warned = false
+      save_skip_prompt(false)
+    end
     return true
   end
   if state.token_warned then
+    return false
+  end
+  if opts and opts.autoprompt == false then
     return false
   end
   M.set_token({ silent = opts and opts.silent, autoprompt = true })
@@ -254,7 +295,7 @@ end
 function M.setup(opts)
   local config = merge_tables(defaults, opts or {})
   state.config = config
-  state.token_warned = false
+  state.token_warned = load_skip_prompt()
   state.default_title_property = config.title_property
   state.databases = normalize_databases(config)
   config.databases = state.databases
@@ -283,7 +324,7 @@ function M.setup(opts)
     state.config.database_id = nil
   end
 
-  ensure_token(config, { silent = true })
+  ensure_token(config, { silent = true, autoprompt = false })
 
   if state.autocmd_id then
     pcall(vim.api.nvim_del_autocmd, state.autocmd_id)
@@ -450,6 +491,7 @@ function M.set_token(opts)
     else
       if opts.autoprompt then
         state.token_warned = true
+        save_skip_prompt(true)
       end
       if not opts.silent then
         local msg = opts.autoprompt and "[notion.nvim] Token is required. Use :NotionSetToken when you are ready." or "[notion.nvim] Token not updated."
