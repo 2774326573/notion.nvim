@@ -1,4 +1,5 @@
 local M = {}
+local languages = require("notion.languages")
 
 local function get_node_text(node, bufnr)
   local text = vim.treesitter.get_node_text(node, bufnr)
@@ -324,19 +325,30 @@ local function divider_block()
 end
 
 local function code_block(language, text)
-  local info = vim.trim(language or "")
-  local opener = info ~= "" and ("```%s"):format(info) or "```"
-  local body = (text or ""):gsub("\r", "")
-  local chunk = opener
-  if body ~= "" then
-    chunk = chunk .. "\n" .. body
-    if not body:match("\n$") then
-      chunk = chunk .. "\n"
-    end
+  local normalized_language = languages.normalize(language and vim.trim(language) or language)
+  local content = (text or ""):gsub("\r", "")
+  local rich_text = {}
+  local max_length = 2000
+  local pos = 1
+
+  if content == "" then
+    table.insert(rich_text, make_text_object("", { code = true }))
   else
-    chunk = chunk .. "\n"
+    while pos <= #content do
+      local piece = content:sub(pos, pos + max_length - 1)
+      table.insert(rich_text, make_text_object(piece, { code = true }))
+      pos = pos + max_length
+    end
   end
-  chunk = chunk .. "```"
+
+  return {
+    object = "block",
+    type = "code",
+    code = {
+      language = normalized_language,
+      rich_text = rich_text,
+    },
+  }
 
   local rich_text = {}
   local max_length = 2000
