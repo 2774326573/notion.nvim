@@ -42,7 +42,7 @@ local function max_time(option)
   return string.format("%.1f", option / 1000)
 end
 
-local function request(method, path, config, body, query)
+local function build_request_command(method, path, config, body, query)
   local url = base_url .. path
   local query_string = encode_query(query)
   if query_string and query_string ~= "" then
@@ -75,11 +75,10 @@ local function request(method, path, config, body, query)
     table.insert(cmd, util.json_encode(body))
   end
 
-  local out, err = util.system(cmd)
-  if not out then
-    return nil, err
-  end
+  return cmd
+end
 
+local function decode_response(out)
   local decoded = util.json_decode(out)
   if not decoded then
     return nil, "Failed to decode Notion response."
@@ -88,6 +87,27 @@ local function request(method, path, config, body, query)
     return nil, decoded.message or decoded.code
   end
   return decoded, nil
+end
+
+local function request(method, path, config, body, query)
+  local cmd = build_request_command(method, path, config, body, query)
+  local out, err = util.system(cmd)
+  if not out then
+    return nil, err
+  end
+  return decode_response(out)
+end
+
+local function request_async(method, path, config, body, query, callback)
+  local cmd = build_request_command(method, path, config, body, query)
+  util.system_async(cmd, function(out, err)
+    if not out then
+      callback(nil, err)
+      return
+    end
+    local decoded, derr = decode_response(out)
+    callback(decoded, derr)
+  end)
 end
 
 function M.list_pages(config, opts)
@@ -171,6 +191,36 @@ function M.retrieve_blocks(block_id, config)
   return accumulator, nil
 end
 
+function M.retrieve_blocks_async(block_id, config, callback)
+  local accumulator = {}
+
+  local function fetch(cursor)
+    request_async(
+      "GET",
+      ("blocks/%s/children"):format(util.norm_id(block_id)),
+      config,
+      nil,
+      { page_size = "100", start_cursor = cursor },
+      function(response, err)
+        if not response then
+          callback(nil, err)
+          return
+        end
+        for _, block in ipairs(response.results or {}) do
+          table.insert(accumulator, block)
+        end
+        if response.has_more and response.next_cursor then
+          fetch(response.next_cursor)
+        else
+          callback(accumulator, nil)
+        end
+      end
+    )
+  end
+
+  fetch(nil)
+end
+
 function M.append_children(block_id, config, children)
   local payload = { children = children }
   local response, err = request(
@@ -185,6 +235,17 @@ function M.append_children(block_id, config, children)
   return response, nil
 end
 
+function M.append_children_async(block_id, config, children, callback)
+  request_async(
+    "PATCH",
+    ("blocks/%s/children"):format(util.norm_id(block_id)),
+    config,
+    { children = children },
+    nil,
+    callback
+  )
+end
+
 function M.update_block(block_id, config, payload)
   local response, err = request(
     "PATCH",
@@ -196,6 +257,17 @@ function M.update_block(block_id, config, payload)
     return nil, err
   end
   return response, nil
+end
+
+function M.update_block_async(block_id, config, payload, callback)
+  request_async(
+    "PATCH",
+    ("blocks/%s"):format(util.norm_id(block_id)),
+    config,
+    payload,
+    nil,
+    callback
+  )
 end
 
 function M.delete_page(page_id, config)
