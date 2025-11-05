@@ -25,6 +25,13 @@ local function text_object(text)
   }
 end
 
+local function caption_objects(text)
+  if not text or text == "" then
+    return {}
+  end
+  return { text_object(text) }
+end
+
 local notion_languages = {
   ["abap"] = true,
   ["arduino"] = true,
@@ -158,6 +165,21 @@ local function paragraph_block(text)
   }
 end
 
+local function image_block(url, caption)
+  if not url or url == "" then
+    return paragraph_block("[notion.nvim] image missing url")
+  end
+  return {
+    object = "block",
+    type = "image",
+    image = {
+      type = "external",
+      external = { url = url },
+      caption = caption_objects(caption),
+    },
+  }
+end
+
 local function heading_block(level, text)
   level = math.max(1, math.min(level, 3))
   local key = ("heading_%d"):format(level)
@@ -229,6 +251,39 @@ local function list_block(block_type, text, children, opts)
 end
 
 local parse_node, parse_list, parse_list_item
+
+local function parse_image_markdown(text)
+  if not text then
+    return nil
+  end
+  local alt, target = text:match("^!%[(.-)%]%((.*)%)$")
+  if not alt then
+    return nil
+  end
+  target = vim.trim(target)
+  if target == "" then
+    return nil
+  end
+  local title
+  local url = target
+  local quoted_url, quoted_title = target:match('^<?([^%s>]+)>?%s+"(.-)"%s*$')
+  if quoted_url then
+    url = quoted_url
+    title = quoted_title
+  end
+  if url:sub(1, 1) == "<" and url:sub(-1) == ">" then
+    url = url:sub(2, -2)
+  end
+  url = vim.trim(url)
+  if url == "" then
+    return nil
+  end
+  return {
+    alt = vim.trim(alt),
+    url = url,
+    title = title and vim.trim(title) or nil,
+  }
+end
 local function fallback_blocks(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local blocks = {}
@@ -307,6 +362,17 @@ local function fallback_blocks(bufnr)
     return false
   end
 
+  local function push_image(line)
+    local parsed = parse_image_markdown(vim.trim(line))
+    if not parsed then
+      return false
+    end
+    flush_paragraph()
+    local caption = parsed.alt ~= "" and parsed.alt or (parsed.title or "")
+    table.insert(blocks, image_block(parsed.url, caption))
+    return true
+  end
+
   local in_code_block = false
   local code_fence = nil
   local code_language = ""
@@ -342,7 +408,7 @@ local function fallback_blocks(bufnr)
       elseif line:match("^%s*$") then
         flush_paragraph()
       else
-        if not (push_heading(line) or push_simple_list(line) or push_quote(line) or push_divider(line)) then
+        if not (push_heading(line) or push_simple_list(line) or push_quote(line) or push_divider(line) or push_image(line)) then
           table.insert(chunk, line)
         end
       end
@@ -434,6 +500,11 @@ parse_node = function(node, bufnr)
     if text == "" then
       return nil
     end
+    local parsed_image = parse_image_markdown(text)
+    if parsed_image then
+      local caption = parsed_image.alt ~= "" and parsed_image.alt or (parsed_image.title or "")
+      return image_block(parsed_image.url, caption)
+    end
     return paragraph_block(text)
   elseif ntype == "atx_heading" then
     local raw = get_node_text(node, bufnr)
@@ -478,6 +549,47 @@ parse_node = function(node, bufnr)
   return nil
 end
 
+local function count_code_blocks(blocks)
+  local total = 0
+  local function walk(list)
+    for _, block in ipairs(list or {}) do
+      if block.type == "code" then
+        total = total + 1
+      end
+      local payload = block[block.type]
+      if payload and payload.children then
+        walk(payload.children)
+      end
+    end
+  end
+  walk(blocks)
+  return total
+end
+
+local function count_fenced_code_in_buffer(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local expected = 0
+  local in_fence = false
+  local fence_char = nil
+  for _, line in ipairs(lines) do
+    if in_fence then
+      local closing = line:match("^%s*([`~]{3,})%s*$")
+      if closing and fence_char and closing:sub(1, 1) == fence_char then
+        in_fence = false
+        fence_char = nil
+      end
+    else
+      local fence = line:match("^%s*([`~]{3,})(.*)$")
+      if fence then
+        expected = expected + 1
+        in_fence = true
+        fence_char = fence:sub(1, 1)
+      end
+    end
+  end
+  return expected
+end
+
 function M.buffer_to_blocks(bufnr, language)
   language = language or "markdown"
   local ok, parser_or_err = pcall(vim.treesitter.get_parser, bufnr, language)
@@ -497,7 +609,10 @@ function M.buffer_to_blocks(bufnr, language)
 
   local blocks = {}
   parse_children(blocks, root, bufnr)
-  if #blocks == 0 then
+  local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
+  local actual_code_blocks = count_code_blocks(blocks)
+  -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
+  if #blocks == 0 or (expected_code_blocks > 0 and actual_code_blocks < expected_code_blocks) then
     blocks = fallback_blocks(bufnr)
   end
   return blocks

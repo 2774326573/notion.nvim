@@ -212,6 +212,24 @@ function M.render_block(block, depth)
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
+  elseif block_type == "image" then
+    local url = nil
+    if payload.type == "external" then
+      url = payload.external and payload.external.url
+    elseif payload.type == "file" then
+      url = payload.file and payload.file.url
+    end
+    if url and url ~= "" then
+      local alt = rich_text_plain(payload.caption) or ""
+      if alt == "" then
+        alt = "image"
+      end
+      alt = alt:gsub("%]", "\\]")
+      table.insert(lines, indent .. string.format("![%s](%s)", alt, url))
+    else
+      table.insert(lines, indent .. "<!-- unsupported image block -->")
+    end
+    pad_blank(lines)
   else
     local fallback = ("<!-- unsupported block: %s -->"):format(block_type)
     table.insert(lines, indent .. fallback)
