@@ -315,6 +315,51 @@ local function parse_image_markdown(text)
     title = title and vim.trim(title) or nil,
   }
 end
+
+local function extract_fenced_code(text)
+  if not text or text == "" then
+    return nil
+  end
+  local lines = vim.split(text, "\n", { plain = true })
+  if #lines < 3 then
+    return nil
+  end
+  local opener, info = lines[1]:match("^%s*([`~]{3,})(.*)$")
+  if not opener then
+    return nil
+  end
+  local fence_char = opener:sub(1, 1)
+  local fence_len = #opener
+  local closing_idx
+  for idx = #lines, 2, -1 do
+    local closing = lines[idx]:match("^%s*([`~]{3,})%s*$")
+    if closing then
+      if closing:sub(1, 1) == fence_char and #closing >= fence_len then
+        closing_idx = idx
+        break
+      end
+    elseif lines[idx]:match("%S") then
+      return nil
+    end
+  end
+  if not closing_idx or closing_idx <= 2 then
+    return nil
+  end
+  for idx = closing_idx + 1, #lines do
+    if lines[idx]:match("%S") then
+      return nil
+    end
+  end
+  local body = {}
+  for idx = 2, closing_idx - 1 do
+    table.insert(body, lines[idx])
+  end
+  local content = table.concat(body, "\n")
+  return {
+    language = vim.trim(info or ""),
+    content = content,
+  }
+end
 local function fallback_blocks(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local blocks = {}
@@ -535,6 +580,10 @@ parse_node = function(node, bufnr)
     if parsed_image then
       local caption = parsed_image.alt ~= "" and parsed_image.alt or (parsed_image.title or "")
       return image_block(parsed_image.url, caption)
+    end
+    local fenced = extract_fenced_code(text)
+    if fenced then
+      return code_block(fenced.language, fenced.content)
     end
     return paragraph_block(text)
   elseif ntype == "atx_heading" then
