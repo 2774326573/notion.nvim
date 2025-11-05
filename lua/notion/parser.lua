@@ -17,6 +17,18 @@ local function annotations_defaults()
   }
 end
 
+local function build_annotations(overrides)
+  local ann = annotations_defaults()
+  if overrides then
+    for key, value in pairs(overrides) do
+      if ann[key] ~= nil then
+        ann[key] = value and true or false
+      end
+    end
+  end
+  return ann
+end
+
 local function text_object(text)
   return {
     type = "text",
@@ -155,12 +167,19 @@ local function normalize_language(language)
   return "plain text"
 end
 
-local function paragraph_block(text)
+local function paragraph_block(text, annotations)
+  local ann = build_annotations(annotations)
   return {
     object = "block",
     type = "paragraph",
     paragraph = {
-      rich_text = { text_object(text) },
+      rich_text = {
+        {
+          type = "text",
+          text = { content = text },
+          annotations = ann,
+        },
+      },
     },
   }
 end
@@ -378,7 +397,27 @@ local function fallback_blocks(bufnr)
     local text = table.concat(chunk, "\n")
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     if text ~= "" then
-      table.insert(blocks, paragraph_block(text))
+      local bold = text:match("^%*%*(.+)%*%*$") or text:match("^__(.+)__$")
+      if bold then
+        table.insert(blocks, paragraph_block(bold, { bold = true }))
+      else
+        local italic = text:match("^%*(.+)%*$") or text:match("^_(.+)_$")
+        if italic then
+          table.insert(blocks, paragraph_block(italic, { italic = true }))
+        else
+          local strike = text:match("^~~(.+)~~$")
+          if strike then
+            table.insert(blocks, paragraph_block(strike, { strikethrough = true }))
+          else
+            local inline_code = text:match("^`(.+)`$")
+            if inline_code then
+              table.insert(blocks, paragraph_block(inline_code, { code = true }))
+            else
+              table.insert(blocks, paragraph_block(text))
+            end
+          end
+        end
+      end
     end
     chunk = {}
   end
@@ -591,6 +630,22 @@ parse_node = function(node, bufnr)
     if fenced then
       return code_block(fenced.language, fenced.content)
     end
+    local bold = text:match("^%*%*(.+)%*%*$") or text:match("^__(.+)__$")
+    if bold then
+      return paragraph_block(bold, { bold = true })
+    end
+    local italic = text:match("^%*(.+)%*$") or text:match("^_(.+)_$")
+    if italic then
+      return paragraph_block(italic, { italic = true })
+    end
+    local strike = text:match("^~~(.+)~~$")
+    if strike then
+      return paragraph_block(strike, { strikethrough = true })
+    end
+    local inline_code = text:match("^`(.+)`$")
+    if inline_code then
+      return paragraph_block(inline_code, { code = true })
+    end
     return paragraph_block(text)
   elseif ntype == "atx_heading" then
     local raw = get_node_text(node, bufnr)
@@ -644,7 +699,7 @@ local function analyze_code_blocks(blocks)
       return false
     end
     for line in text:gmatch("[^\n]+") do
-      if line:match("^%s*[`~]{3,}%s*$") then
+      if line:match("^%s*[`~]{3,}.*$") then
         return true
       end
     end
