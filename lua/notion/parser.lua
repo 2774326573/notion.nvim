@@ -25,6 +25,129 @@ local function text_object(text)
   }
 end
 
+local notion_languages = {
+  ["abap"] = true,
+  ["arduino"] = true,
+  ["bash"] = true,
+  ["basic"] = true,
+  ["c"] = true,
+  ["csharp"] = true,
+  ["cpp"] = true,
+  ["clojure"] = true,
+  ["coffeescript"] = true,
+  ["csp"] = true,
+  ["css"] = true,
+  ["dart"] = true,
+  ["diff"] = true,
+  ["docker"] = true,
+  ["elixir"] = true,
+  ["elm"] = true,
+  ["erlang"] = true,
+  ["flow"] = true,
+  ["fortran"] = true,
+  ["fsharp"] = true,
+  ["gherkin"] = true,
+  ["glsl"] = true,
+  ["go"] = true,
+  ["graphql"] = true,
+  ["groovy"] = true,
+  ["haskell"] = true,
+  ["html"] = true,
+  ["java"] = true,
+  ["javascript"] = true,
+  ["json"] = true,
+  ["julia"] = true,
+  ["kotlin"] = true,
+  ["latex"] = true,
+  ["less"] = true,
+  ["lisp"] = true,
+  ["livescript"] = true,
+  ["lua"] = true,
+  ["makefile"] = true,
+  ["markdown"] = true,
+  ["matlab"] = true,
+  ["mermaid"] = true,
+  ["nginx"] = true,
+  ["nim"] = true,
+  ["nix"] = true,
+  ["objective-c"] = true,
+  ["ocaml"] = true,
+  ["pascal"] = true,
+  ["perl"] = true,
+  ["php"] = true,
+  ["plain text"] = true,
+  ["powershell"] = true,
+  ["prolog"] = true,
+  ["protobuf"] = true,
+  ["python"] = true,
+  ["r"] = true,
+  ["reason"] = true,
+  ["ruby"] = true,
+  ["rust"] = true,
+  ["sass"] = true,
+  ["scala"] = true,
+  ["scheme"] = true,
+  ["scss"] = true,
+  ["shell"] = true,
+  ["sql"] = true,
+  ["swift"] = true,
+  ["typescript"] = true,
+  ["vb"] = true,
+  ["verilog"] = true,
+  ["vhdl"] = true,
+  ["visual basic"] = true,
+  ["webassembly"] = true,
+  ["xml"] = true,
+  ["yaml"] = true,
+}
+
+local language_aliases = {
+  ["c++"] = "cpp",
+  ["cplusplus"] = "cpp",
+  ["cxx"] = "cpp",
+  ["c#"] = "csharp",
+  ["cs"] = "csharp",
+  ["f#"] = "fsharp",
+  ["fs"] = "fsharp",
+  ["objective c"] = "objective-c",
+  ["objectivec"] = "objective-c",
+  ["objc"] = "objective-c",
+  ["js"] = "javascript",
+  ["node"] = "javascript",
+  ["ts"] = "typescript",
+  ["py"] = "python",
+  ["ps1"] = "powershell",
+  ["powershell"] = "powershell",
+  ["sh"] = "shell",
+  ["zsh"] = "shell",
+  ["bash"] = "bash",
+  ["shell"] = "shell",
+  ["plaintext"] = "plain text",
+  ["text"] = "plain text",
+  ["plain"] = "plain text",
+  ["c++ "] = "cpp",
+}
+
+local function normalize_language(language)
+  if not language or language == "" then
+    return "plain text"
+  end
+  local lang = language:lower()
+  lang = lang:gsub("[_%s]+", " ")
+  lang = lang:gsub("^%s+", ""):gsub("%s+$", "")
+  lang = language_aliases[lang] or lang
+  if notion_languages[lang] then
+    return lang
+  end
+  -- try replacing spaces with hyphen (objective c -> objective-c)
+  local hyphenated = lang:gsub("%s+", "-")
+  hyphenated = language_aliases[hyphenated] or hyphenated
+  if notion_languages[hyphenated] then
+    return hyphenated
+  end
+  return "plain text"
+end
+
 local function paragraph_block(text)
   return {
     object = "block",
@@ -57,7 +180,7 @@ local function code_block(language, text)
     type = "code",
     code = {
       rich_text = { text_object(text) },
-      language = language or "plain text",
+      language = normalize_language(language),
     },
   }
 end
@@ -308,7 +431,7 @@ parse_node = function(node, bufnr)
     for i = 0, node:named_child_count() - 1 do
       local child = node:named_child(i)
       if child:type() == "info_string" then
-        language = get_node_text(child, bufnr)
+        language = vim.trim(get_node_text(child, bufnr))
       elseif child:type() == "code_fence_content" then
         text = get_node_text(child, bufnr)
       end
