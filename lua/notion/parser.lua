@@ -46,9 +46,12 @@ end
 
 local notion_languages = {
   ["abap"] = true,
+  ["agda"] = true,
   ["arduino"] = true,
+  ["ascii art"] = true,
   ["bash"] = true,
   ["basic"] = true,
+  ["bnf"] = true,
   ["c"] = true,
   ["csharp"] = true,
   ["cpp"] = true,
@@ -57,6 +60,7 @@ local notion_languages = {
   ["csp"] = true,
   ["css"] = true,
   ["dart"] = true,
+  ["dhall"] = true,
   ["diff"] = true,
   ["docker"] = true,
   ["elixir"] = true,
@@ -81,14 +85,18 @@ local notion_languages = {
   ["less"] = true,
   ["lisp"] = true,
   ["livescript"] = true,
+  ["llvm ir"] = true,
   ["lua"] = true,
   ["makefile"] = true,
   ["markdown"] = true,
+  ["markup"] = true,
+  ["mathematica"] = true,
   ["matlab"] = true,
   ["mermaid"] = true,
   ["nginx"] = true,
   ["nim"] = true,
   ["nix"] = true,
+  ["notion"] = true,
   ["objective-c"] = true,
   ["ocaml"] = true,
   ["pascal"] = true,
@@ -108,6 +116,7 @@ local notion_languages = {
   ["scheme"] = true,
   ["scss"] = true,
   ["shell"] = true,
+  ["solidity"] = true,
   ["sql"] = true,
   ["swift"] = true,
   ["typescript"] = true,
@@ -145,6 +154,15 @@ local language_aliases = {
   ["text"] = "plain text",
   ["plain"] = "plain text",
   ["c++ "] = "cpp",
+  ["ascii-art"] = "ascii art",
+  ["ascii"] = "ascii art",
+  ["llvm"] = "llvm ir",
+  ["llvm-ir"] = "llvm ir",
+  ["notion formula"] = "notion",
+  ["notion 函数"] = "notion",
+  ["notion函数"] = "notion",
+  ["wolfram"] = "mathematica",
+  ["wolfram language"] = "mathematica",
 }
 
 local function normalize_language(language)
@@ -182,6 +200,66 @@ local function paragraph_block(text, annotations)
       },
     },
   }
+end
+
+local function block_plain_text(block)
+  if not block then
+    return ""
+  end
+  local payload = block[block.type]
+  if not payload or not payload.rich_text then
+    return ""
+  end
+  local parts = {}
+  for _, node in ipairs(payload.rich_text) do
+    local value = node.plain_text or (node.text and node.text.content) or ""
+    table.insert(parts, value)
+  end
+  return table.concat(parts, "")
+end
+
+local function collapse_markdown_fences(blocks)
+  local out = {}
+  local i = 1
+  while i <= #blocks do
+    local block = blocks[i]
+    if block.type == "paragraph" then
+      local text = block_plain_text(block)
+      local opener, info = text:match("^%s*([`~]{3,})(.*)$")
+      if opener then
+        local fence_char = opener:sub(1, 1)
+        local fence_len = #opener
+        local language = vim.trim(info or "")
+        local body = {}
+        local j = i + 1
+        local closed = false
+        while j <= #blocks do
+          local candidate = blocks[j]
+          if candidate.type ~= "paragraph" then
+            break
+          end
+          local ctext = block_plain_text(candidate)
+          local closing = ctext:match("^%s*([`~]{3,})%s*$")
+          if closing and closing:sub(1, 1) == fence_char and #closing >= fence_len then
+            closed = true
+            j = j + 1
+            break
+          end
+          table.insert(body, ctext)
+          j = j + 1
+        end
+        if closed then
+          table.insert(out, code_block(language, table.concat(body, "\n")))
+          i = j
+          goto continue
+        end
+      end
+    end
+    table.insert(out, block)
+    i = i + 1
+    ::continue::
+  end
+  return out
 end
 
 local function image_block(url, caption)
@@ -782,6 +860,7 @@ function M.buffer_to_blocks(bufnr, language)
 
   local blocks = {}
   parse_children(blocks, root, bufnr)
+  blocks = collapse_markdown_fences(blocks)
   local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
   local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
@@ -789,6 +868,7 @@ function M.buffer_to_blocks(bufnr, language)
     or (expected_code_blocks > 0 and (actual_code_blocks < expected_code_blocks or fencey_code_blocks > 0))
   then
     blocks = fallback_blocks(bufnr)
+    blocks = collapse_markdown_fences(blocks)
   end
   return blocks
 end
