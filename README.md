@@ -90,6 +90,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 | `:NotionNew` | Prompt for a title, create a page, then open it. |
 | `:NotionSync` | Force a sync of the current buffer back to Notion. |
 | `:NotionSetToken` | Prompt for and persist the API token via `vim.ui.input`. |
+| `:NotionDeletePage [id]` | Archive/delete a page (defaults to the current buffer's page). |
 | `:NotionRefreshPages` | Clear the cached listing for the current database and refetch it. |
 | `:NotionSelectDatabase` | Pick the active database when multiple are configured. |
 

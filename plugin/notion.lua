@@ -45,6 +45,13 @@ end, {
   desc = "Set Notion API token",
 })
 
+vim.api.nvim_create_user_command("NotionDeletePage", function(opts)
+  notion.delete_page(opts.args ~= "" and opts.args or nil)
+end, {
+  nargs = "?",
+  desc = "Archive/delete a Notion page (current buffer by default)",
+})
+
 vim.api.nvim_create_user_command("NotionRefreshPages", function(opts)
   notion.refresh_pages(opts)
 end, {

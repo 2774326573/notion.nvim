@@ -187,6 +187,19 @@ function M.update_block(block_id, config, payload)
   return response, nil
 end
 
+function M.delete_page(page_id, config)
+  local response, err = request(
+    "PATCH",
+    "pages/" .. util.norm_id(page_id),
+    config,
+    { archived = true }
+  )
+  if not response then
+    return nil, err
+  end
+  return response, nil
+end
+
 function M.create_page(config, payload)
   local response, err = request("POST", "pages", config, payload)
   if not response then

@@ -480,6 +480,55 @@ function M.sync_current_buffer()
   require("notion.sync").sync_buffer(bufnr)
 end
 
+function M.delete_page(page_id)
+  if not ensure_setup() then
+    return
+  end
+  local config = state.config
+  if not ensure_token(config) then
+    return
+  end
+  if not ensure_database_selected() then
+    return
+  end
+
+  local bufnr
+  if not page_id or page_id == "" then
+    bufnr = vim.api.nvim_get_current_buf()
+    page_id = vim.b[bufnr] and vim.b[bufnr].notion_page_id or nil
+  end
+
+  if not page_id or page_id == "" then
+    util.notify("[notion.nvim] No Notion page ID available for deletion.", vim.log.levels.WARN)
+    return
+  end
+
+  local _, err = api.delete_page(page_id, config)
+  if err then
+    util.notify("[notion.nvim] Failed deleting page: " .. err, vim.log.levels.ERROR)
+    return
+  end
+
+  local db_id = config.database_id
+  local norm = util.norm_id(page_id)
+  local cache = state.page_cache[db_id]
+  if cache then
+    for idx = #cache.items, 1, -1 do
+      local item = cache.items[idx]
+      if util.norm_id(item.id or "") == norm then
+        table.remove(cache.items, idx)
+        break
+      end
+    end
+  end
+
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+  end
+
+  util.notify("[notion.nvim] Page archived in Notion.", vim.log.levels.INFO)
+end
+
 function M.get_databases()
   if not ensure_setup() then
     return {}

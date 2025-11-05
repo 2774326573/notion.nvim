@@ -90,6 +90,7 @@
 | `:NotionNew` | 新建页面并立即打开 |
 | `:NotionSync` | 手动同步当前缓冲区 |
 | `:NotionSetToken` | 弹窗输入并保存 API 密钥 |
+| `:NotionDeletePage [id]` | 删除（归档）指定页面，若省略 ID 则默认当前缓冲区 |
 | `:NotionRefreshPages` | 清除当前数据库缓存并重新获取 |
 | `:NotionSelectDatabase` | 多数据库环境下切换当前数据库 |
 
