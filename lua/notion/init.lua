@@ -244,7 +244,10 @@ local function ensure_token(config, opts)
   if resolve_token(config) then
     return true
   end
-  M.set_token({ silent = opts and opts.silent })
+  if state.token_warned then
+    return false
+  end
+  M.set_token({ silent = opts and opts.silent, autoprompt = true })
   return false
 end
 
@@ -445,8 +448,12 @@ function M.set_token(opts)
         vim.notify("[notion.nvim] Token saved.", vim.log.levels.INFO)
       end
     else
+      if opts.autoprompt then
+        state.token_warned = true
+      end
       if not opts.silent then
-        vim.notify("[notion.nvim] Token not updated.", vim.log.levels.INFO)
+        local msg = opts.autoprompt and "[notion.nvim] Token is required. Use :NotionSetToken when you are ready." or "[notion.nvim] Token not updated."
+        vim.notify(msg, vim.log.levels.WARN)
       end
     end
   end)

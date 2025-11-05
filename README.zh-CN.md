@@ -70,7 +70,7 @@
 2. 将目标数据库（或单独页面）分享给该集成，并授予“可编辑”权限。
 3. 提供 API 密钥（任选其一）：
    - 在启动前设置 `NOTION_API_TOKEN`；
-   - 或运行 `:NotionSetToken`（通过 `vim.ui.input` 弹窗输入，Windows/macOS/Linux 均适用，并会将密钥保存到 `stdpath('data')/notion.nvim/token.txt`；缺少密钥时相关命令会自动弹窗）。
+   - 或运行 `:NotionSetToken`（通过 `vim.ui.input` 弹窗输入，Windows/macOS/Linux 均适用，并会将密钥保存到 `stdpath('data')/notion.nvim/token.txt`；首次缺少密钥时相关命令会弹窗，按下 Cancel 即可暂时跳过，之后不会再提示，待准备好再执行 `:NotionSetToken`）。
    - 可选 `NOTION_TITLE_PROPERTY`：若标题列不是 `"Name"`。
 4. 安装 tree-sitter 语法：`:TSInstall markdown markdown_inline`。
 5. 重启 Neovim，并尝试：

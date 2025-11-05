@@ -70,7 +70,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 2. Share the database (or specific pages) with that integration and grant **Can edit** permissions.
 3. Provide your API token in one of the following ways:
    - Set `NOTION_API_TOKEN` before launching Neovim, or
-   - Run `:NotionSetToken` (uses `vim.ui.input`; works on Windows, macOS, and Linux, persisting the token to `stdpath('data')/notion.nvim/token.txt`; commands that need the token will prompt automatically if it's missing).
+   - Run `:NotionSetToken` (uses `vim.ui.input`; works on Windows, macOS, and Linux, persisting the token to `stdpath('data')/notion.nvim/token.txt`; commands that need the token will prompt once when it is missing—press Cancel to defer and you will not be prompted again until you run `:NotionSetToken`).
    - Optional: `NOTION_TITLE_PROPERTY` if your title column is not `"Name"`.
 4. Install tree-sitter grammars: `:TSInstall markdown markdown_inline`.
 5. Restart Neovim and try:
