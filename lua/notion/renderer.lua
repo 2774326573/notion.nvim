@@ -2,6 +2,34 @@ local util = require("notion.util")
 
 local M = {}
 
+local function split_lines(text)
+  text = (text or ""):gsub("\r", "")
+  if text == "" then
+    return { "" }
+  end
+  local lines = {}
+  local start = 1
+  while true do
+    local nl = text:find("\n", start, true)
+    if not nl then
+      table.insert(lines, text:sub(start))
+      break
+    end
+    table.insert(lines, text:sub(start, nl - 1))
+    start = nl + 1
+    if start > #text then
+      if start == #text + 1 then
+        table.insert(lines, "")
+      end
+      break
+    end
+  end
+  if #lines == 0 then
+    table.insert(lines, "")
+  end
+  return lines
+end
+
 local function apply_annotations(text, annotations)
   if not annotations then
     return text
@@ -50,6 +78,27 @@ local function rich_text_to_markdown(rich_text)
   return table.concat(segments, "")
 end
 
+local function rich_text_plain(rich_text)
+  local segments = {}
+  for _, node in ipairs(rich_text or {}) do
+    local text = node.plain_text or node.text and node.text.content or ""
+    table.insert(segments, text)
+  end
+  return table.concat(segments, "")
+end
+
+local function append_wrapped(target, prefix, text)
+  local lines = split_lines(text)
+  if #lines == 0 then
+    table.insert(target, prefix)
+    return
+  end
+  table.insert(target, prefix .. lines[1])
+  for i = 2, #lines do
+    table.insert(target, prefix .. lines[i])
+  end
+end
+
 local function render_children(children, depth)
   local out = {}
   for _, child in ipairs(children or {}) do
@@ -78,40 +127,71 @@ function M.render_block(block, depth)
   local payload = block[block_type] or {}
 
   if block_type == "paragraph" then
-    local text = rich_text_to_markdown(payload.rich_text)
-    table.insert(lines, indent .. text)
+    append_wrapped(lines, indent, rich_text_to_markdown(payload.rich_text))
     pad_blank(lines)
   elseif block_type == "heading_1" then
-    table.insert(lines, ("# %s"):format(rich_text_to_markdown(payload.rich_text)))
+    local first = split_lines(rich_text_to_markdown(payload.rich_text))[1]
+    table.insert(lines, ("# %s"):format(first))
     pad_blank(lines)
   elseif block_type == "heading_2" then
-    table.insert(lines, ("## %s"):format(rich_text_to_markdown(payload.rich_text)))
+    local first = split_lines(rich_text_to_markdown(payload.rich_text))[1]
+    table.insert(lines, ("## %s"):format(first))
     pad_blank(lines)
   elseif block_type == "heading_3" then
-    table.insert(lines, ("### %s"):format(rich_text_to_markdown(payload.rich_text)))
+    local first = split_lines(rich_text_to_markdown(payload.rich_text))[1]
+    table.insert(lines, ("### %s"):format(first))
     pad_blank(lines)
   elseif block_type == "bulleted_list_item" then
-    table.insert(lines, indent .. "- " .. rich_text_to_markdown(payload.rich_text))
+    local text = rich_text_to_markdown(payload.rich_text)
+    local parts = split_lines(text)
+    if #parts == 0 then
+      table.insert(lines, indent .. "- ")
+    else
+      table.insert(lines, indent .. "- " .. parts[1])
+      for i = 2, #parts do
+        table.insert(lines, indent .. "  " .. parts[i])
+      end
+    end
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
   elseif block_type == "numbered_list_item" then
-    table.insert(lines, indent .. "1. " .. rich_text_to_markdown(payload.rich_text))
+    local text = rich_text_to_markdown(payload.rich_text)
+    local parts = split_lines(text)
+    if #parts == 0 then
+      table.insert(lines, indent .. "1. ")
+    else
+      table.insert(lines, indent .. "1. " .. parts[1])
+      for i = 2, #parts do
+        table.insert(lines, indent .. "   " .. parts[i])
+      end
+    end
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
   elseif block_type == "to_do" then
     local mark = payload.checked and "x" or " "
-    table.insert(lines, indent .. ("- [%s] %s"):format(mark, rich_text_to_markdown(payload.rich_text)))
+    local text = rich_text_to_markdown(payload.rich_text)
+    local parts = split_lines(text)
+    if #parts == 0 then
+      table.insert(lines, indent .. ("- [%s] "):format(mark))
+    else
+      table.insert(lines, indent .. ("- [%s] %s"):format(mark, parts[1]))
+      for i = 2, #parts do
+        table.insert(lines, indent .. "  " .. parts[i])
+      end
+    end
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
   elseif block_type == "quote" then
-    table.insert(lines, indent .. "> " .. rich_text_to_markdown(payload.rich_text))
+    append_wrapped(lines, indent .. "> ", rich_text_to_markdown(payload.rich_text))
     pad_blank(lines)
   elseif block_type == "code" then
     table.insert(lines, ("```%s"):format(payload.language or ""))
-    table.insert(lines, rich_text_to_markdown(payload.rich_text))
+    for _, line_text in ipairs(split_lines(rich_text_plain(payload.rich_text))) do
+      table.insert(lines, line_text)
+    end
     table.insert(lines, "```")
     pad_blank(lines)
   elseif block_type == "divider" then
@@ -119,7 +199,16 @@ function M.render_block(block, depth)
     pad_blank(lines)
   elseif block_type == "callout" then
     local icon = payload.icon and (payload.icon.emoji or payload.icon.type) or "💡"
-    table.insert(lines, indent .. (icon .. " " .. rich_text_to_markdown(payload.rich_text)))
+    local text = rich_text_to_markdown(payload.rich_text)
+    local parts = split_lines(text)
+    if #parts == 0 then
+      table.insert(lines, indent .. icon .. " ")
+    else
+      table.insert(lines, indent .. icon .. " " .. parts[1])
+      for i = 2, #parts do
+        table.insert(lines, indent .. "  " .. parts[i])
+      end
+    end
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
