@@ -29,13 +29,173 @@ local function build_annotations(overrides)
   return ann
 end
 
-local function text_object(text)
+local function make_text_object(text, opts)
+  text = text or ""
+  opts = opts or {}
+  local annotations = build_annotations(opts)
+  local link = nil
+  local href = nil
+  if opts.href and opts.href ~= "" then
+    link = { url = opts.href }
+    href = opts.href
+  end
   return {
     type = "text",
-    text = { content = text },
+    text = { content = text, link = link },
     plain_text = text,
-    annotations = annotations_defaults(),
+    annotations = annotations,
+    href = href,
   }
+end
+
+local function text_object(text)
+  return make_text_object(text)
+end
+
+local function flush_plain_segment(segments, buffer)
+  if #buffer == 0 then
+    return
+  end
+  table.insert(segments, make_text_object(table.concat(buffer)))
+  for idx = #buffer, 1, -1 do
+    buffer[idx] = nil
+  end
+end
+
+local function parse_inline_markdown(text)
+  if not text or text == "" then
+    return {}
+  end
+  local segments = {}
+  local buffer = {}
+  local i = 1
+  local len = #text
+  while i <= len do
+    local remaining = len - i + 1
+    local trip_star = remaining >= 3 and text:sub(i, i + 2) or nil
+    local trip_underscore = remaining >= 3 and text:sub(i, i + 2) or nil
+    if trip_star == "***" then
+      local closing = text:find("***", i + 3, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 3, closing - 1)
+        table.insert(segments, make_text_object(content, { bold = true, italic = true }))
+        i = closing + 3
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif trip_underscore == "___" then
+      local closing = text:find("___", i + 3, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 3, closing - 1)
+        table.insert(segments, make_text_object(content, { italic = true, underline = true }))
+        i = closing + 3
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "**" then
+      local closing = text:find("**", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { bold = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "__" then
+      local closing = text:find("__", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { underline = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "~~" then
+      local closing = text:find("~~", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { strikethrough = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    else
+      local ch = text:sub(i, i)
+      if ch == "`" then
+        local closing = text:find("`", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { code = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "*" then
+        local closing = text:find("*", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { italic = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "_" then
+        local closing = text:find("_", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { italic = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "[" then
+        local close_bracket = text:find("]", i + 1, true)
+        local url = nil
+        if close_bracket then
+          if text:sub(close_bracket + 1, close_bracket + 1) == "(" then
+            local close_paren = text:find(")", close_bracket + 2, true)
+            if close_paren then
+              url = vim.trim(text:sub(close_bracket + 2, close_paren - 1))
+              local label = text:sub(i + 1, close_bracket - 1)
+              flush_plain_segment(segments, buffer)
+              table.insert(segments, make_text_object(label ~= "" and label or url, { href = url }))
+              i = close_paren + 1
+            else
+              table.insert(buffer, ch)
+              i = i + 1
+            end
+          else
+            table.insert(buffer, ch)
+            i = i + 1
+          end
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      else
+        table.insert(buffer, ch)
+        i = i + 1
+      end
+    end
+  end
+  flush_plain_segment(segments, buffer)
+  return segments
 end
 
 local function caption_objects(text)
@@ -187,19 +347,20 @@ local function normalize_language(language)
 end
 
 local function paragraph_block(text, annotations)
-  local ann = build_annotations(annotations)
+  local rich_text
+  if annotations then
+    rich_text = { make_text_object(text or "", annotations) }
+  else
+    rich_text = parse_inline_markdown(text)
+    if #rich_text == 0 then
+      rich_text = { make_text_object(text or "") }
+    end
+  end
   return {
     object = "block",
     type = "paragraph",
     paragraph = {
-      rich_text = {
-        {
-          type = "text",
-          text = { content = text },
-          plain_text = text,
-          annotations = ann,
-        },
-      },
+      rich_text = rich_text,
     },
   }
 end
@@ -282,11 +443,15 @@ end
 local function heading_block(level, text)
   level = math.max(1, math.min(level, 3))
   local key = ("heading_%d"):format(level)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   return {
     object = "block",
     type = key,
     [key] = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
 end
@@ -304,33 +469,42 @@ local function code_block(language, text)
       return cleaned
     end
     local lines = vim.split(cleaned, "\n", { plain = true })
-    if #lines == 0 then
-      return cleaned
+    local first = 1
+    local last = #lines
+    while first <= last and lines[first] == "" do
+      first = first + 1
     end
-    while #lines > 0 and lines[#lines] == "" do
-      table.remove(lines, #lines)
+    while last >= first and lines[last] == "" do
+      last = last - 1
     end
-    while #lines > 0 and lines[1] == "" do
-      table.remove(lines, 1)
+    if first > last then
+      return ""
     end
-    local last = lines[#lines]
-    local closing = last and last:match("^%s*([`~]{3,})%s*$")
-    if closing then
+    local opener = lines[first]
+    local closer = lines[last]
+    local closing = closer and closer:match("^%s*([`~]{3,})%s*$")
+    if closing and opener then
       local fence_char = closing:sub(1, 1)
       local fence_seq = string.rep(fence_char, #closing)
-      local first = lines[1]
-      if first and first:match("^%s*" .. fence_seq) then
-        table.remove(lines, #lines)
-        table.remove(lines, 1)
-        while #lines > 0 and lines[1] == "" do
-          table.remove(lines, 1)
+      if opener:match("^%s*" .. fence_seq) then
+        first = first + 1
+        last = last - 1
+        while first <= last and lines[first] == "" do
+          first = first + 1
         end
-        while #lines > 0 and lines[#lines] == "" do
-          table.remove(lines, #lines)
+        while last >= first and lines[last] == "" do
+          last = last - 1
+        end
+        if first > last then
+          return ""
         end
       end
     end
-    return table.concat(lines, "\n")
+    local buffer = {}
+    for idx = first, last do
+      buffer[#buffer + 1] = lines[idx]
+    end
+    return table.concat(buffer, "\n")
   end
 
   local clean_text = sanitize_code_content(text)
@@ -360,21 +534,29 @@ local function code_block(language, text)
 end
 
 local function quote_block(text)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   return {
     object = "block",
     type = "quote",
     quote = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
 end
 
 local function list_block(block_type, text, children, opts)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   local block = {
     object = "block",
     type = block_type,
     [block_type] = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
   if block_type == "to_do" then
@@ -477,27 +659,7 @@ local function fallback_blocks(bufnr)
     local text = table.concat(chunk, "\n")
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     if text ~= "" then
-      local bold = text:match("^%*%*(.+)%*%*$") or text:match("^__(.+)__$")
-      if bold then
-        table.insert(blocks, paragraph_block(bold, { bold = true }))
-      else
-        local italic = text:match("^%*(.+)%*$") or text:match("^_(.+)_$")
-        if italic then
-          table.insert(blocks, paragraph_block(italic, { italic = true }))
-        else
-          local strike = text:match("^~~(.+)~~$")
-          if strike then
-            table.insert(blocks, paragraph_block(strike, { strikethrough = true }))
-          else
-            local inline_code = text:match("^`(.+)`$")
-            if inline_code then
-              table.insert(blocks, paragraph_block(inline_code, { code = true }))
-            else
-              table.insert(blocks, paragraph_block(text))
-            end
-          end
-        end
-      end
+      table.insert(blocks, paragraph_block(text))
     end
     chunk = {}
   end
@@ -710,22 +872,6 @@ parse_node = function(node, bufnr)
     if fenced then
       return code_block(fenced.language, fenced.content)
     end
-    local bold = text:match("^%*%*(.+)%*%*$") or text:match("^__(.+)__$")
-    if bold then
-      return paragraph_block(bold, { bold = true })
-    end
-    local italic = text:match("^%*(.+)%*$") or text:match("^_(.+)_$")
-    if italic then
-      return paragraph_block(italic, { italic = true })
-    end
-    local strike = text:match("^~~(.+)~~$")
-    if strike then
-      return paragraph_block(strike, { strikethrough = true })
-    end
-    local inline_code = text:match("^`(.+)`$")
-    if inline_code then
-      return paragraph_block(inline_code, { code = true })
-    end
     return paragraph_block(text)
   elseif ntype == "atx_heading" then
     local raw = get_node_text(node, bufnr)
@@ -845,10 +991,6 @@ end
 
 function M.buffer_to_blocks(bufnr, language)
   language = language or "markdown"
-  local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
-  if expected_code_blocks > 0 then
-    return collapse_markdown_fences(fallback_blocks(bufnr))
-  end
   local ok, parser_or_err = pcall(vim.treesitter.get_parser, bufnr, language)
   if not ok then
     vim.schedule(function()
@@ -867,6 +1009,7 @@ function M.buffer_to_blocks(bufnr, language)
   local blocks = {}
   parse_children(blocks, root, bufnr)
   blocks = collapse_markdown_fences(blocks)
+  local expected_code_blocks = count_fenced_code_in_buffer(bufnr)
   local actual_code_blocks, fencey_code_blocks = analyze_code_blocks(blocks)
   -- Fall back when tree-sitter fails to emit code blocks, otherwise Notion sees raw fences.
   if #blocks == 0
