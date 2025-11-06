@@ -591,18 +591,26 @@ local function code_block(language, text)
   }
 end
 
-local function quote_block(text)
-  local rich_text = parse_inline_markdown(text)
-  if #rich_text == 0 then
-    rich_text = { make_text_object(text or "") }
+local function quote_block(text, opts)
+  opts = opts or {}
+  local rich_text = opts.rich_text
+  if not rich_text then
+    rich_text = parse_inline_markdown(text)
+    if #rich_text == 0 then
+      rich_text = { make_text_object(text or "") }
+    end
   end
-  return {
+  local block = {
     object = "block",
     type = "quote",
     quote = {
       rich_text = rich_text,
     },
   }
+  if opts.children and #opts.children > 0 then
+    block.quote.children = opts.children
+  end
+  return block
 end
 
 local function list_block(block_type, text, children, opts)
@@ -1107,10 +1115,19 @@ parse_node = function(node, bufnr)
     local raw = get_node_text(node, bufnr)
     local lines = {}
     for line in raw:gmatch("[^\n]+") do
-      line = line:gsub("^>%s*", "")
-      table.insert(lines, line)
+      local updated, removed = line:gsub("^%s*>%s?", "", 1)
+      if removed == 0 then
+        updated = line
+      end
+      updated = updated:gsub("^%s+", "")
+      table.insert(lines, updated)
     end
-    return quote_block(table.concat(lines, "\n"))
+    local text = table.concat(lines, "\n")
+    local rich_text = parse_inline_markdown(text)
+    if #rich_text == 0 then
+      rich_text = { make_text_object(text) }
+    end
+    return quote_block(nil, { rich_text = rich_text })
   elseif ntype == "thematic_break" then
     return divider_block()
   elseif ntype == "list" then
