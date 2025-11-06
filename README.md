@@ -2,6 +2,10 @@
 
 > Bring Notion into Neovim: search pages, edit them as Markdown, and sync changes back with a single write.
 
+![](https://raw.githubusercontent.com/2774326573/PicGo/main/img/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202025-11-06%20115653.png)
+
+![notion.nvim editing flow](https://raw.githubusercontent.com/2774326573/PicGo/main/img/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202025-11-06%20115707.png)
+
 ## Table of contents
 
 - [Features](#features)
@@ -92,6 +96,31 @@ These inline markups round-trip between Neovim and Notion:
 | `::{red}text::` | Red text |
 
 Supported color names: `gray`, `brown`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`, `red`, plus `default`. Append `_background` for highlight colors (for example `green_background`).
+
+### Example page
+
+```markdown
+# Demo Note
+
+> ::{blue}hello::
+>
+> 1. First task
+>   - ==Subtask A==
+>   - =={green_background}Subtask B==
+> 2. Second task
+
+- [ ] Pending
+- [x] Done
+
+Inline math: $e^{i\pi}+1=0$
+Display math:
+
+$$
+f(x) = \int_{-\infty}^{\infty} \hat f(\xi) e^{2\pi i \xi x} \, d\xi
+$$
+```
+
+This snippet showcases nested quotes, lists, to-dos, colour annotations, and LaTeX blocks exactly as they sync between Neovim and Notion.
 
 ## Commands
 

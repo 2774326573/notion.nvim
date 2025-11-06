@@ -2,6 +2,10 @@
 
 > 在 Neovim 中浏览、编辑并同步 Notion 页面，让 Markdown 工作流无缝接入 Notion。
 
+![](https://raw.githubusercontent.com/2774326573/PicGo/main/img/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202025-11-06%20115653.png)
+
+![notion.nvim 编辑流程示例](https://raw.githubusercontent.com/2774326573/PicGo/main/img/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202025-11-06%20115707.png)
+
 ## 目录
 
 - [功能亮点](#功能亮点)
@@ -92,6 +96,31 @@
 | `::{red}文本::` | 红色字体 |
 
 支持的颜色名称：`gray`、`brown`、`orange`、`yellow`、`green`、`blue`、`purple`、`pink`、`red`，以及 `default`。高亮颜色需要使用 `_background` 后缀（例如 `green_background`）。
+
+### 示例页面
+
+```markdown
+# 演示笔记
+
+> ::{blue}hello::
+>
+> 1. 第一步
+>   - ==子任务 A==
+>   - =={green_background}子任务 B==
+> 2. 第二步
+
+- [ ] 待办
+- [x] 完成
+
+行内公式：$e^{i\pi}+1=0$
+展示公式：
+
+$$
+f(x) = \int_{-\infty}^{\infty} \hat f(\xi) e^{2\pi i \xi x} \, d\xi
+$$
+```
+
+这段 Markdown 示范了引用、列表、待办、颜色标注以及 LaTeX 公式在 Neovim 和 Notion 之间的同步效果。
 
 ## 常用命令
 
