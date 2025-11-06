@@ -23,6 +23,7 @@
 - **自动同步：** 保存（`:w`）或执行 `:NotionSync` 即可把改动推回 Notion。
 - **页面缓存：** 页面列表会在内存中缓存（可配置 TTL），避免每次切换都重新请求；需要时可用 `:NotionRefreshPages` 强制刷新。
 - **tree-sitter 管线：** Markdown ↔ Notion Block 转换安全可靠，无法解析的内容会退化为普通段落。
+- **丰富格式：** 加粗/斜体/代码、数学公式、文本高亮（`==文本==`）、背景色（`=={blue_background}文本==`）以及字体颜色（`::{red}文本::`）都可以在 Notion 与 Neovim 之间双向同步。
 - **多数据库支持：** 在配置中声明多个数据库，使用 `:NotionSelectDatabase` 快速切换；插件会在会话之间记住你上次选择的数据库。
 
 ## 环境要求
@@ -79,6 +80,18 @@
    - `:NotionOpen <page_id>` 直接打开指定页面；
    - `:NotionNew` 新建页面并立即进入编辑。
 6. 像普通 Markdown 一样编辑，执行 `:w` 即同步回 Notion；如需切换数据库，可使用 `:NotionSelectDatabase` 或自定义快捷键。
+
+## 格式速查
+
+在 Neovim 中使用以下标记，可与 Notion 保持一致：
+
+| Markdown（Neovim） | Notion 效果 |
+| --- | --- |
+| `==文本==` | 黄色高亮 |
+| `=={blue_background}文本==` | 蓝色高亮 |
+| `::{red}文本::` | 红色字体 |
+
+支持的颜色名称：`gray`、`brown`、`orange`、`yellow`、`green`、`blue`、`purple`、`pink`、`red`，以及 `default`。高亮颜色需要使用 `_background` 后缀（例如 `green_background`）。
 
 ## 常用命令
 

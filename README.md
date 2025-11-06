@@ -23,6 +23,7 @@
 - **Automatic sync:** write the buffer or run `:NotionSync` to push updates back to Notion.
 - **Cached listings:** avoid refetching large databases by caching results (configurable TTL); use `:NotionRefreshPages` to force a refresh.
 - **Tree-sitter pipeline:** Markdown-to-Notion block conversion with safe fallbacks for unsupported content.
+- **Rich formatting:** Inline bold/italic/code, math, highlights (`==text==`), background colors (`=={blue_background}text==`), and text colors (`::{red}text::`) round-trip between Notion and Neovim.
 - **Multi-database aware:** declare several databases and switch with `:NotionSelectDatabase`; the plugin remembers your last choice across sessions.
 
 ## Requirements
@@ -79,6 +80,18 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
    - `:NotionOpen <page_id>` to jump straight to a known page.
    - `:NotionNew` to create and open a fresh page.
 6. Edit as Markdown and write (`:w`) to sync back to Notion. Use `:NotionSelectDatabase` (or your own key bindings) to switch databases when needed.
+
+## Formatting cheatsheet
+
+These inline markups round-trip between Neovim and Notion:
+
+| Markdown in Neovim | Result in Notion |
+| --- | --- |
+| `==text==` | Yellow highlight |
+| `=={blue_background}text==` | Blue highlight |
+| `::{red}text::` | Red text |
+
+Supported color names: `gray`, `brown`, `orange`, `yellow`, `green`, `blue`, `purple`, `pink`, `red`, plus `default`. Append `_background` for highlight colors (for example `green_background`).
 
 ## Commands
 

@@ -22,11 +22,50 @@ local function build_annotations(overrides)
   if overrides then
     for key, value in pairs(overrides) do
       if ann[key] ~= nil then
-        ann[key] = value and true or false
+        if key == "color" then
+          ann[key] = value or "default"
+        else
+          ann[key] = value and true or false
+        end
       end
     end
   end
   return ann
+end
+
+local notion_text_colors = {
+  default = true,
+  gray = true,
+  brown = true,
+  orange = true,
+  yellow = true,
+  green = true,
+  blue = true,
+  purple = true,
+  pink = true,
+  red = true,
+}
+
+local function normalize_color_input(value)
+  return (value or ""):lower():gsub("[%s%-]+", "_")
+end
+
+local function is_valid_text_color(color)
+  return color ~= nil and notion_text_colors[color] == true
+end
+
+local function is_valid_background_color(color)
+  if not color then
+    return false
+  end
+  if color == "default" then
+    return true
+  end
+  if not color:match("_background$") then
+    return false
+  end
+  local base = color:gsub("_background$", "")
+  return is_valid_text_color(base)
 end
 
 local function make_text_object(text, opts)
@@ -89,6 +128,52 @@ local function find_unescaped_marker(text, marker, start_pos)
       pos = idx + marker_len
     end
   end
+end
+
+local function parse_highlight_markup(raw)
+  if not raw then
+    return nil
+  end
+  local body = raw
+  local color = "yellow_background"
+  local cstart, cend, explicit = body:find("^%{%s*([^%}]+)%s*%}")
+  if cstart then
+    color = normalize_color_input(explicit)
+    body = body:sub(cend + 1)
+  end
+  body = vim.trim(body)
+  if body == "" then
+    return nil
+  end
+  if color == "" then
+    color = "yellow_background"
+  end
+  if not color:match("_background$") then
+    color = color .. "_background"
+  end
+  if not is_valid_background_color(color) then
+    return nil
+  end
+  return body, color
+end
+
+local function parse_color_markup(raw)
+  if not raw then
+    return nil
+  end
+  local color_token, rest = raw:match("^%{%s*([^%}]+)%s*%}(.*)$")
+  if not color_token then
+    return nil
+  end
+  local color = normalize_color_input(color_token)
+  if not is_valid_text_color(color) then
+    return nil
+  end
+  rest = vim.trim(rest or "")
+  if rest == "" then
+    return nil
+  end
+  return rest, color
 end
 
 local function parse_inline_markdown(text)
@@ -157,6 +242,40 @@ local function parse_inline_markdown(text)
         local content = text:sub(i + 2, closing - 1)
         table.insert(segments, make_text_object(content, { strikethrough = true }))
         i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "==" then
+      local closing = text:find("==", i + 2, true)
+      if closing then
+        local content = text:sub(i + 2, closing - 1)
+        local inner, highlight_color = parse_highlight_markup(content)
+        if inner then
+          flush_plain_segment(segments, buffer)
+          table.insert(segments, make_text_object(inner, { color = highlight_color }))
+          i = closing + 2
+        else
+          table.insert(buffer, text:sub(i, closing + 1))
+          i = closing + 2
+        end
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "::" then
+      local closing = text:find("::", i + 2, true)
+      if closing then
+        local content = text:sub(i + 2, closing - 1)
+        local inner, color = parse_color_markup(content)
+        if inner then
+          flush_plain_segment(segments, buffer)
+          table.insert(segments, make_text_object(inner, { color = color }))
+          i = closing + 2
+        else
+          table.insert(buffer, text:sub(i, closing + 1))
+          i = closing + 2
+        end
       else
         table.insert(buffer, text:sub(i, i))
         i = i + 1
@@ -801,11 +920,31 @@ local function fallback_blocks(bufnr)
           if strike then
             table.insert(blocks, paragraph_block(strike, { strikethrough = true }))
           else
-            local inline_code = text:match("^`(.+)`$")
-            if inline_code then
-              table.insert(blocks, paragraph_block(inline_code, { code = true }))
+            local highlight_raw = text:match("^==(.+)==$")
+            if highlight_raw then
+              local highlight_text, highlight_color = parse_highlight_markup(highlight_raw)
+              if highlight_text then
+                table.insert(blocks, paragraph_block(highlight_text, { color = highlight_color }))
+              else
+                table.insert(blocks, paragraph_block(text))
+              end
             else
-              table.insert(blocks, paragraph_block(text))
+              local color_raw = text:match("^::(.+)::$")
+              if color_raw then
+                local color_text, color_name = parse_color_markup(color_raw)
+                if color_text then
+                  table.insert(blocks, paragraph_block(color_text, { color = color_name }))
+                else
+                  table.insert(blocks, paragraph_block(text))
+                end
+              else
+                local inline_code = text:match("^`(.+)`$")
+                if inline_code then
+                  table.insert(blocks, paragraph_block(inline_code, { code = true }))
+                else
+                  table.insert(blocks, paragraph_block(text))
+                end
+              end
             end
           end
         end
@@ -1084,6 +1223,20 @@ parse_node = function(node, bufnr)
     local strike = text:match("^~~(.+)~~$")
     if strike then
       return paragraph_block(strike, { strikethrough = true })
+    end
+    local highlight_raw = text:match("^==(.+)==$")
+    if highlight_raw then
+      local highlight_text, highlight_color = parse_highlight_markup(highlight_raw)
+      if highlight_text then
+        return paragraph_block(highlight_text, { color = highlight_color })
+      end
+    end
+    local color_raw = text:match("^::(.+)::$")
+    if color_raw then
+      local color_text, color_name = parse_color_markup(color_raw)
+      if color_text then
+        return paragraph_block(color_text, { color = color_name })
+      end
     end
     local inline_code = text:match("^`(.+)`$")
     if inline_code then

@@ -52,7 +52,15 @@ local function apply_annotations(text, annotations)
     end
   end
   if annotations.color and annotations.color ~= "default" then
-    value = string.format("<span class=\"notion-color-%s\">%s</span>", annotations.color, value)
+    if annotations.color:match("_background$") then
+      if annotations.color == "yellow_background" then
+        value = "==" .. value .. "=="
+      else
+        value = string.format("=={%s}%s==", annotations.color, value)
+      end
+    else
+      value = string.format("<span class=\"notion-color-%s\">%s</span>", annotations.color, value)
+    end
   end
   return value
 end
