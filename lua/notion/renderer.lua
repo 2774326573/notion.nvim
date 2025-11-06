@@ -184,6 +184,13 @@ function M.render_block(block, depth)
     for _, line in ipairs(render_children(payload.children, depth + 1)) do
       table.insert(lines, line)
     end
+  elseif block_type == "equation" then
+    table.insert(lines, indent .. "$$")
+    for _, line_text in ipairs(split_lines(payload.expression or "")) do
+      table.insert(lines, indent .. line_text)
+    end
+    table.insert(lines, indent .. "$$")
+    pad_blank(lines)
   elseif block_type == "quote" then
     append_wrapped(lines, indent .. "> ", rich_text_to_markdown(payload.rich_text))
     pad_blank(lines)
