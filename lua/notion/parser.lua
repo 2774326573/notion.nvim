@@ -1112,22 +1112,55 @@ parse_node = function(node, bufnr)
     local text = get_node_text(node, bufnr)
     return code_block("plain text", text)
   elseif ntype == "block_quote" then
-    local raw = get_node_text(node, bufnr)
-    local lines = {}
-    for line in raw:gmatch("[^\n]+") do
-      local updated, removed = line:gsub("^%s*>%s?", "", 1)
-      if removed == 0 then
-        updated = line
+    local rich_text = {}
+    local quote_children = {}
+    local last_paragraph = false
+
+    for i = 0, node:named_child_count() - 1 do
+      local child = node:named_child(i)
+      local ctype = child:type()
+      if ctype == "paragraph" then
+        local text = get_node_text(child, bufnr)
+        text = text:gsub("^%s+", ""):gsub("%s+$", "")
+        local parsed = parse_inline_markdown(text)
+        if #parsed == 0 then
+          parsed = { make_text_object(text) }
+        end
+        if #rich_text > 0 then
+          table.insert(rich_text, make_text_object("\n"))
+        end
+        for _, rt in ipairs(parsed) do
+          table.insert(rich_text, rt)
+        end
+        last_paragraph = true
+      elseif ctype == "list" then
+        local items = parse_list(child, bufnr)
+        for _, item in ipairs(items) do
+          table.insert(quote_children, item)
+        end
+        last_paragraph = false
+      else
+        local block = parse_node(child, bufnr)
+        if block then
+          if vim.tbl_islist(block) then
+            for _, nested in ipairs(block) do
+              table.insert(quote_children, nested)
+            end
+          else
+            table.insert(quote_children, block)
+          end
+        end
+        last_paragraph = false
       end
-      updated = updated:gsub("^%s+", "")
-      table.insert(lines, updated)
     end
-    local text = table.concat(lines, "\n")
-    local rich_text = parse_inline_markdown(text)
+
     if #rich_text == 0 then
-      rich_text = { make_text_object(text) }
+      rich_text = { make_text_object("") }
+    elseif last_paragraph and rich_text[#rich_text].plain_text == "\n" then
+      table.remove(rich_text, #rich_text)
     end
-    return quote_block(nil, { rich_text = rich_text })
+
+    return quote_block(nil, { rich_text = rich_text, children = quote_children })
   elseif ntype == "thematic_break" then
     return divider_block()
   elseif ntype == "list" then
