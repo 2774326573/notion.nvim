@@ -39,6 +39,7 @@ Example using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   "2774326573/notion.nvim",
+  branch = "newMain",
   config = function()
     require("notion").setup({
       token = os.getenv("NOTION_API_TOKEN"),
