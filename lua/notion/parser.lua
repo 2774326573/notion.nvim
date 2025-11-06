@@ -432,9 +432,12 @@ local function collapse_markdown_fences(blocks)
   return out
 end
 
-local function image_block(url, caption)
+local function image_block(url, caption, raw)
   if not url or url == "" then
-    return paragraph_block("[notion.nvim] image missing url")
+    return paragraph_block(raw or "[notion.nvim] image missing url")
+  end
+  if #url > 2000 then
+    return paragraph_block(raw or "[notion.nvim] image url exceeds 2000 characters")
   end
   return {
     object = "block",
@@ -789,7 +792,7 @@ local function fallback_blocks(bufnr)
     end
     flush_paragraph()
     local caption = parsed.alt ~= "" and parsed.alt or (parsed.title or "")
-    table.insert(blocks, image_block(parsed.url, caption))
+  table.insert(blocks, image_block(parsed.url, caption, line))
     clear_list_stack()
     return true
   end
@@ -929,7 +932,7 @@ parse_node = function(node, bufnr)
     local parsed_image = parse_image_markdown(text)
     if parsed_image then
       local caption = parsed_image.alt ~= "" and parsed_image.alt or (parsed_image.title or "")
-      return image_block(parsed_image.url, caption)
+  return image_block(parsed_image.url, caption, text)
     end
     local fenced = extract_fenced_code(text)
     if fenced then
