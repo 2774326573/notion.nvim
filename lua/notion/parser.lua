@@ -29,20 +29,187 @@ local function build_annotations(overrides)
   return ann
 end
 
-local function text_object(text)
+local function make_text_object(text, opts)
+  text = text or ""
+  opts = opts or {}
+  local annotations = build_annotations(opts)
+  local link = nil
+  local href = nil
+  if opts.href and opts.href ~= "" then
+    link = { url = opts.href }
+    href = opts.href
+  end
   return {
     type = "text",
-    text = { content = text },
+    text = { content = text, link = link },
     plain_text = text,
-    annotations = annotations_defaults(),
+    annotations = annotations,
+    href = href,
   }
+end
+
+local function text_object(text, opts)
+  return make_text_object(text, opts)
+end
+
+local function flush_plain_segment(segments, buffer)
+  if #buffer == 0 then
+    return
+  end
+  table.insert(segments, make_text_object(table.concat(buffer)))
+  for idx = #buffer, 1, -1 do
+    buffer[idx] = nil
+  end
+end
+
+local function parse_inline_markdown(text)
+  if not text or text == "" then
+    return {}
+  end
+  if text:match("^%s*([`~]{3,}).*$") or text:match("^%s*%-%-%-%s*$") or text:match("^%s*___%s*$") or text:match("^%s*%*%*%*%s*$") then
+    return { make_text_object(text) }
+  end
+  local segments = {}
+  local buffer = {}
+  local i = 1
+  local len = #text
+  while i <= len do
+    local remaining = len - i + 1
+    local trip_star = remaining >= 3 and text:sub(i, i + 2) or nil
+    local trip_underscore = remaining >= 3 and text:sub(i, i + 2) or nil
+    if trip_star == "***" then
+      local closing = text:find("***", i + 3, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 3, closing - 1)
+        table.insert(segments, make_text_object(content, { bold = true, italic = true }))
+        i = closing + 3
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif trip_underscore == "___" then
+      local closing = text:find("___", i + 3, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 3, closing - 1)
+        table.insert(segments, make_text_object(content, { italic = true, underline = true }))
+        i = closing + 3
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "**" then
+      local closing = text:find("**", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { bold = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "__" then
+      local closing = text:find("__", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { underline = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    elseif remaining >= 2 and text:sub(i, i + 1) == "~~" then
+      local closing = text:find("~~", i + 2, true)
+      if closing then
+        flush_plain_segment(segments, buffer)
+        local content = text:sub(i + 2, closing - 1)
+        table.insert(segments, make_text_object(content, { strikethrough = true }))
+        i = closing + 2
+      else
+        table.insert(buffer, text:sub(i, i))
+        i = i + 1
+      end
+    else
+      local ch = text:sub(i, i)
+      if ch == "`" then
+        local closing = text:find("`", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { code = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "*" then
+        local closing = text:find("*", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { italic = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "_" then
+        local closing = text:find("_", i + 1, true)
+        if closing then
+          flush_plain_segment(segments, buffer)
+          local content = text:sub(i + 1, closing - 1)
+          table.insert(segments, make_text_object(content, { italic = true }))
+          i = closing + 1
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      elseif ch == "[" then
+        local close_bracket = text:find("]", i + 1, true)
+        local url = nil
+        if close_bracket then
+          if text:sub(close_bracket + 1, close_bracket + 1) == "(" then
+            local close_paren = text:find(")", close_bracket + 2, true)
+            if close_paren then
+              url = vim.trim(text:sub(close_bracket + 2, close_paren - 1))
+              local label = text:sub(i + 1, close_bracket - 1)
+              flush_plain_segment(segments, buffer)
+              table.insert(segments, make_text_object(label ~= "" and label or url, { href = url }))
+              i = close_paren + 1
+            else
+              table.insert(buffer, ch)
+              i = i + 1
+            end
+          else
+            table.insert(buffer, ch)
+            i = i + 1
+          end
+        else
+          table.insert(buffer, ch)
+          i = i + 1
+        end
+      else
+        table.insert(buffer, ch)
+        i = i + 1
+      end
+    end
+  end
+  flush_plain_segment(segments, buffer)
+  return segments
 end
 
 local function caption_objects(text)
   if not text or text == "" then
     return {}
   end
-  return { text_object(text) }
+  local parsed = parse_inline_markdown(text)
+  if #parsed == 0 then
+    parsed = { make_text_object(text) }
+  end
+  return parsed
 end
 
 local notion_languages = {
@@ -187,19 +354,20 @@ local function normalize_language(language)
 end
 
 local function paragraph_block(text, annotations)
-  local ann = build_annotations(annotations)
+  local rich_text
+  if annotations then
+    rich_text = { make_text_object(text or "", annotations) }
+  else
+    rich_text = parse_inline_markdown(text)
+    if #rich_text == 0 then
+      rich_text = { make_text_object(text or "") }
+    end
+  end
   return {
     object = "block",
     type = "paragraph",
     paragraph = {
-      rich_text = {
-        {
-          type = "text",
-          text = { content = text },
-          plain_text = text,
-          annotations = ann,
-        },
-      },
+      rich_text = rich_text,
     },
   }
 end
@@ -282,11 +450,15 @@ end
 local function heading_block(level, text)
   level = math.max(1, math.min(level, 3))
   local key = ("heading_%d"):format(level)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   return {
     object = "block",
     type = key,
     [key] = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
 end
@@ -339,12 +511,12 @@ local function code_block(language, text)
   local max_length = 2000
 
   if #clean_text <= max_length then
-    table.insert(rich_text, text_object(clean_text))
+    table.insert(rich_text, make_text_object(clean_text, { code = true }))
   else
     local pos = 1
     while pos <= #clean_text do
       local chunk = clean_text:sub(pos, pos + max_length - 1)
-      table.insert(rich_text, text_object(chunk))
+      table.insert(rich_text, make_text_object(chunk, { code = true }))
       pos = pos + max_length
     end
   end
@@ -360,21 +532,29 @@ local function code_block(language, text)
 end
 
 local function quote_block(text)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   return {
     object = "block",
     type = "quote",
     quote = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
 end
 
 local function list_block(block_type, text, children, opts)
+  local rich_text = parse_inline_markdown(text)
+  if #rich_text == 0 then
+    rich_text = { make_text_object(text or "") }
+  end
   local block = {
     object = "block",
     type = block_type,
     [block_type] = {
-      rich_text = { text_object(text) },
+      rich_text = rich_text,
     },
   }
   if block_type == "to_do" then
