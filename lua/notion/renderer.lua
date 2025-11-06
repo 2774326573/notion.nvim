@@ -192,7 +192,29 @@ function M.render_block(block, depth)
     table.insert(lines, indent .. "$$")
     pad_blank(lines)
   elseif block_type == "quote" then
-    append_wrapped(lines, indent .. "> ", rich_text_to_markdown(payload.rich_text))
+    local text = rich_text_to_markdown(payload.rich_text)
+    local parts = split_lines(text)
+    if #parts == 0 then
+      table.insert(lines, indent .. ">")
+    else
+      for _, part in ipairs(parts) do
+        if part == "" then
+          table.insert(lines, indent .. ">")
+        else
+          table.insert(lines, indent .. "> " .. part)
+        end
+      end
+    end
+    for _, child in ipairs(payload.children or {}) do
+      local child_lines = M.render_block(child, depth + 1)
+      for _, child_line in ipairs(child_lines) do
+        if child_line == "" then
+          table.insert(lines, indent .. ">")
+        else
+          table.insert(lines, indent .. "> " .. child_line)
+        end
+      end
+    end
     pad_blank(lines)
   elseif block_type == "code" then
     table.insert(lines, ("```%s"):format(payload.language or ""))
