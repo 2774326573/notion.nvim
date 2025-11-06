@@ -62,6 +62,35 @@ local function flush_plain_segment(segments, buffer)
   end
 end
 
+local function equation_rich_text(expression)
+  local expr = expression or ""
+  return {
+    type = "equation",
+    equation = { expression = expr },
+    plain_text = expr,
+    annotations = annotations_defaults(),
+    href = nil,
+  }
+end
+
+local function find_unescaped_marker(text, marker, start_pos)
+  local pos = start_pos
+  local marker_len = #marker
+  while true do
+    local idx = text:find(marker, pos, true)
+    if not idx then
+      return nil
+    end
+    if idx == start_pos then
+      pos = idx + marker_len
+    elseif text:sub(idx - 1, idx - 1) ~= "\\" then
+      return idx
+    else
+      pos = idx + marker_len
+    end
+  end
+end
+
 local function parse_inline_markdown(text)
   if not text or text == "" then
     return {}
@@ -144,6 +173,31 @@ local function parse_inline_markdown(text)
         else
           table.insert(buffer, ch)
           i = i + 1
+        end
+      elseif ch == "$" then
+        local double = text:sub(i, i + 1) == "$$"
+        if double then
+          local closing = find_unescaped_marker(text, "$$", i + 2)
+          if closing then
+            flush_plain_segment(segments, buffer)
+            local content = text:sub(i + 2, closing - 1)
+            table.insert(segments, equation_rich_text(vim.trim(content)))
+            i = closing + 2
+          else
+            table.insert(buffer, ch)
+            i = i + 1
+          end
+        else
+          local closing = find_unescaped_marker(text, "$", i + 1)
+          if closing then
+            flush_plain_segment(segments, buffer)
+            local content = text:sub(i + 1, closing - 1)
+            table.insert(segments, equation_rich_text(vim.trim(content)))
+            i = closing + 1
+          else
+            table.insert(buffer, ch)
+            i = i + 1
+          end
         end
       elseif ch == "*" then
         local closing = text:find("*", i + 1, true)
@@ -261,6 +315,7 @@ local notion_languages = {
   ["mathematica"] = true,
   ["matlab"] = true,
   ["mermaid"] = true,
+  ["flowchart"] = true,
   ["nginx"] = true,
   ["nim"] = true,
   ["nix"] = true,
@@ -331,6 +386,8 @@ local language_aliases = {
   ["notion函数"] = "notion",
   ["wolfram"] = "mathematica",
   ["wolfram language"] = "mathematica",
+  ["flowchart"] = "mermaid",
+  ["flow chart"] = "mermaid",
 }
 
 local function normalize_language(language)
@@ -569,6 +626,16 @@ local function list_block(block_type, text, children, opts)
   return block
 end
 
+local function equation_block(expression)
+  return {
+    object = "block",
+    type = "equation",
+    equation = {
+      expression = expression or "",
+    },
+  }
+end
+
 local parse_node, parse_list, parse_list_item
 
 local function parse_image_markdown(text)
@@ -647,6 +714,33 @@ local function extract_fenced_code(text)
     language = vim.trim(info or ""),
     content = content,
   }
+end
+
+local function extract_display_math(text)
+  if not text or text == "" then
+    return nil
+  end
+  local trimmed = vim.trim(text)
+  if not trimmed:match("^%$%$") then
+    return nil
+  end
+  if trimmed:sub(-2) == "$$" and #trimmed > 4 then
+    local inner = trimmed:sub(3, -3)
+    return vim.trim(inner)
+  end
+  local lines = vim.split(text, "\n", { plain = true })
+  if #lines >= 2 and lines[1]:match("^%s*%$%$%s*$") then
+    for idx = 2, #lines do
+      if lines[idx]:match("^%s*%$%$%s*$") then
+        local body = {}
+        for j = 2, idx - 1 do
+          table.insert(body, lines[j])
+        end
+        return vim.trim(table.concat(body, "\n"))
+      end
+    end
+  end
+  return nil
 end
 local function fallback_blocks(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -792,7 +886,7 @@ local function fallback_blocks(bufnr)
     end
     flush_paragraph()
     local caption = parsed.alt ~= "" and parsed.alt or (parsed.title or "")
-  table.insert(blocks, image_block(parsed.url, caption, line))
+    table.insert(blocks, image_block(parsed.url, caption, line))
     clear_list_stack()
     return true
   end
@@ -801,6 +895,8 @@ local function fallback_blocks(bufnr)
   local code_fence = nil
   local code_language = ""
   local code_lines = {}
+  local in_equation_block = false
+  local equation_lines = {}
 
   local function finish_code_block()
     if not in_code_block then
@@ -814,6 +910,16 @@ local function fallback_blocks(bufnr)
     clear_list_stack()
   end
 
+  local function finish_equation_block()
+    if not in_equation_block then
+      return
+    end
+    table.insert(blocks, equation_block(vim.trim(table.concat(equation_lines, "\n"))))
+    in_equation_block = false
+    equation_lines = {}
+    clear_list_stack()
+  end
+
   for _, line in ipairs(lines) do
     if in_code_block then
       local closing = line:match("^%s*([`~]{3,})%s*$")
@@ -821,6 +927,12 @@ local function fallback_blocks(bufnr)
         finish_code_block()
       else
         table.insert(code_lines, line)
+      end
+    elseif in_equation_block then
+      if line:match("^%s*%$%$%s*$") then
+        finish_equation_block()
+      else
+        table.insert(equation_lines, line)
       end
     else
       local fence, info = line:match("^%s*([`~]{3,})(.*)$")
@@ -830,6 +942,16 @@ local function fallback_blocks(bufnr)
         code_fence = fence:sub(1, 1)
         code_language = vim.trim(info or "")
         code_lines = {}
+      elseif line:match("^%s*%$%$%s*$") then
+        flush_paragraph()
+        finish_equation_block()
+        in_equation_block = true
+        equation_lines = {}
+      elseif line:match("^%s*%$%$(.+)%$%$%s*$") then
+        flush_paragraph()
+        local expr = line:match("^%s*%$%$(.+)%$%$%s*$")
+        table.insert(blocks, equation_block(vim.trim(expr or "")))
+        clear_list_stack()
       elseif line:match("^%s*$") then
         flush_paragraph()
         clear_list_stack()
@@ -845,6 +967,7 @@ local function fallback_blocks(bufnr)
   end
   flush_paragraph()
   finish_code_block()
+  finish_equation_block()
 
   if #blocks == 0 then
     for _, line in ipairs(lines) do
@@ -932,7 +1055,11 @@ parse_node = function(node, bufnr)
     local parsed_image = parse_image_markdown(text)
     if parsed_image then
       local caption = parsed_image.alt ~= "" and parsed_image.alt or (parsed_image.title or "")
-  return image_block(parsed_image.url, caption, text)
+      return image_block(parsed_image.url, caption, text)
+    end
+    local display_math = extract_display_math(text)
+    if display_math then
+      return equation_block(display_math)
     end
     local fenced = extract_fenced_code(text)
     if fenced then
